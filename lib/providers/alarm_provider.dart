@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/alarm.dart';
-import '../services/storage_service.dart';
+import '../services/alarm_scheduler.dart';
 import '../services/notification_service.dart';
+import '../services/storage_service.dart';
 
 class AlarmProvider extends ChangeNotifier {
   List<Alarm> _alarms = [];
@@ -11,6 +12,27 @@ class AlarmProvider extends ChangeNotifier {
   Future<void> loadAlarms() async {
     _alarms = await StorageService.getAllAlarms();
     _sortAlarms();
+
+    // Sync the native alarm schedules with our database:
+    //  - cancel any legacy flutter_local_notifications alarm notifications
+    //  - re-register every enabled alarm (idempotent; the plugin keeps its
+    //    own persisted schedule that survives reboot, this just re-arms the
+    //    next daily occurrence and repairs anything the OS dropped)
+    for (final alarm in _alarms) {
+      await NotificationService.cancelLegacyAlarmNotification(alarm.id!);
+      if (alarm.isEnabled) {
+        await AlarmRingScheduler.scheduleDaily(
+          alarmDbId: alarm.id!,
+          hour: alarm.hour,
+          minute: alarm.minute,
+          label: alarm.label,
+          ringtone: alarm.ringtone,
+        );
+      } else {
+        await AlarmRingScheduler.stop(alarm.id!);
+      }
+    }
+
     notifyListeners();
   }
 
@@ -21,7 +43,13 @@ class AlarmProvider extends ChangeNotifier {
     _sortAlarms();
 
     if (saved.isEnabled) {
-      await NotificationService.scheduleDailyAlarm(alarm: saved);
+      await AlarmRingScheduler.scheduleDaily(
+        alarmDbId: id,
+        hour: saved.hour,
+        minute: saved.minute,
+        label: saved.label,
+        ringtone: saved.ringtone,
+      );
     }
     notifyListeners();
   }
@@ -35,16 +63,22 @@ class AlarmProvider extends ChangeNotifier {
     _sortAlarms();
 
     if (alarm.isEnabled && alarm.id != null) {
-      await NotificationService.scheduleDailyAlarm(alarm: alarm);
+      await AlarmRingScheduler.scheduleDaily(
+        alarmDbId: alarm.id!,
+        hour: alarm.hour,
+        minute: alarm.minute,
+        label: alarm.label,
+        ringtone: alarm.ringtone,
+      );
     } else if (alarm.id != null) {
-      await NotificationService.cancelAlarm(alarm.id!);
+      await AlarmRingScheduler.stop(alarm.id!);
     }
     notifyListeners();
   }
 
   Future<void> deleteAlarm(int id) async {
     await StorageService.deleteAlarm(id);
-    await NotificationService.cancelAlarm(id);
+    await AlarmRingScheduler.stop(id);
     _alarms.removeWhere((a) => a.id == id);
     notifyListeners();
   }

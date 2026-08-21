@@ -21,7 +21,7 @@ dependencies:
   permission_handler: ^13.0.1
   nepali_utils: ^3.0.8
   nepali_date_picker: ^7.0.1
-  audioplayers: ^6.1.0
+  alarm: ^5.11.0
 
 dev_dependencies:
   flutter_test:

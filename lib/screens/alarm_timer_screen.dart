@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../models/alarm.dart';
 import '../models/timer_state.dart';
 import '../providers/alarm_provider.dart';
+import '../services/alarm_scheduler.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
@@ -81,6 +84,7 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
           : 0,
       minute: 0,
     );
+    String selectedRingtone = AlarmRingScheduler.ringtones.first.asset;
 
     await showDialog<void>(
       context: context,
@@ -147,6 +151,28 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
                       }
                     },
                   ),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedRingtone,
+                    decoration: const InputDecoration(
+                      labelText: 'Ringtone',
+                      prefixIcon: Icon(Icons.music_note_rounded,
+                          color: AppColors.primary),
+                    ),
+                    items: AlarmRingScheduler.ringtones
+                        .map(
+                          (r) => DropdownMenuItem(
+                            value: r.asset,
+                            child: Text(r.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(() => selectedRingtone = v);
+                      }
+                    },
+                  ),
                 ],
               ),
               actions: [
@@ -165,6 +191,7 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
                             hour: selectedTime.hour,
                             minute: selectedTime.minute,
                             label: label,
+                            ringtone: selectedRingtone,
                           ),
                         );
                     Navigator.pop(dialogContext);
@@ -189,8 +216,86 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
 
 // ================= Alarm tab =================
 
-class _AlarmTab extends StatelessWidget {
+class _AlarmTab extends StatefulWidget {
   const _AlarmTab();
+
+  @override
+  State<_AlarmTab> createState() => _AlarmTabState();
+}
+
+class _AlarmTabState extends State<_AlarmTab> {
+  bool _exactAlarmGranted = true;
+  bool _batteryExempt = true;
+  bool _checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshPermissions();
+  }
+
+  Future<void> _refreshPermissions() async {
+    try {
+      final exact = await Permission.scheduleExactAlarm.status;
+      final battery = await Permission.ignoreBatteryOptimizations.status;
+      if (!mounted) return;
+      setState(() {
+        _exactAlarmGranted = exact.isGranted;
+        _batteryExempt = battery.isGranted;
+        _checking = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _requestExactAlarm() async {
+    final result = await Permission.scheduleExactAlarm.request();
+    if (result.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+    await _refreshPermissions();
+  }
+
+  Future<void> _requestBatteryExemption() async {
+    final result = await Permission.ignoreBatteryOptimizations.request();
+    if (result.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+    await _refreshPermissions();
+  }
+
+  Widget _permissionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool granted,
+    required String grantedLabel,
+    required VoidCallback onRequest,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ListTile(
+      leading: Icon(icon,
+          color: granted ? AppColors.success : AppColors.warning),
+      title: Text(title,
+          style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.darkTextPrimary : AppColors.textDark)),
+      subtitle: Text(
+        granted ? grantedLabel : subtitle,
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: granted
+          ? const Icon(Icons.check_circle_rounded,
+              color: AppColors.success, size: 22)
+          : TextButton(
+              onPressed: onRequest,
+              child: const Text('Grant',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -198,26 +303,80 @@ class _AlarmTab extends StatelessWidget {
       builder: (context, provider, _) {
         final alarms = provider.alarms;
 
-        if (alarms.isEmpty) {
-          return const EmptyState(
-            message: 'No alarms yet!\nTap + to add your first alarm',
-            icon: Icons.alarm_add_rounded,
-          );
-        }
-
-        return ListView.builder(
+        return ListView(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
-          itemCount: alarms.length,
-          itemBuilder: (context, index) {
-            final alarm = alarms[index];
-            return _AlarmCard(
-              alarm: alarm,
-              onToggle: (enabled) =>
-                  context.read<AlarmProvider>().toggleAlarm(alarm.id!, enabled),
-              onDelete: () =>
-                  context.read<AlarmProvider>().deleteAlarm(alarm.id!),
-            );
-          },
+          children: [
+            if (Platform.isAndroid && !_checking) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Card(
+                  child: Column(
+                    children: [
+                      _permissionTile(
+                        icon: Icons.timer_rounded,
+                        title: 'Exact alarms',
+                        subtitle:
+                            'Required for alarms to ring exactly on time',
+                        granted: _exactAlarmGranted,
+                        grantedLabel: 'Granted — rings exactly on time',
+                        onRequest: _requestExactAlarm,
+                      ),
+                      const Divider(height: 1),
+                      _permissionTile(
+                        icon: Icons.battery_saver_rounded,
+                        title: 'Battery optimization',
+                        subtitle:
+                            'Exempt the app from Doze so alarms are not delayed',
+                        granted: _batteryExempt,
+                        grantedLabel: 'Exempted — alarms won\'t be delayed',
+                        onRequest: _requestBatteryExemption,
+                      ),
+                      const Padding(
+                        padding:
+                            EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded,
+                                size: 14, color: AppColors.textGrey),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Full-screen alerts over the lock screen are '
+                                'enabled automatically with exact alarms '
+                                '(Android 14+).',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textGrey),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (alarms.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 48),
+                child: EmptyState(
+                  message: 'No alarms yet!\nTap + to add your first alarm',
+                  icon: Icons.alarm_add_rounded,
+                ),
+              )
+            else
+              ...alarms.map((alarm) {
+                return _AlarmCard(
+                  alarm: alarm,
+                  onToggle: (enabled) =>
+                      context.read<AlarmProvider>().toggleAlarm(alarm.id!, enabled),
+                  onDelete: () =>
+                      context.read<AlarmProvider>().deleteAlarm(alarm.id!),
+                );
+              }).toList(),
+          ],
         );
       },
     );
@@ -281,6 +440,15 @@ class _AlarmCard extends StatelessWidget {
                       fontSize: 13,
                       color: alarm.isEnabled
                           ? AppColors.textGrey
+                          : AppColors.textLight,
+                    ),
+                  ),
+                  Text(
+                    AlarmRingScheduler.ringtoneLabel(alarm.ringtone),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: alarm.isEnabled
+                          ? AppColors.primary.withValues(alpha: 0.8)
                           : AppColors.textLight,
                     ),
                   ),
@@ -360,6 +528,7 @@ class _TimerTabState extends State<_TimerTab> {
     } else if (saved.isRunning) {
       // The timer finished while the app was closed (the full-screen ring
       // already went off). Clean up and show the finished state.
+      AlarmRingScheduler.stopTimer();
       NotificationService.cancelTimerRunning();
       await StorageService.deleteAppState(_stateKey);
       if (!mounted) return;
@@ -398,12 +567,14 @@ class _TimerTabState extends State<_TimerTab> {
 
   Future<void> _clearState() => StorageService.deleteAppState(_stateKey);
 
-  void _start() {
+  Future<void> _start() async {
     if (_remainingSeconds <= 0) return;
     final endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
-    NotificationService.scheduleTimerEnd(Duration(seconds: _remainingSeconds));
+    // Exact, full-screen, looping ring at the end — handled by the native
+    // alarm scheduler even if the app is closed/killed.
+    await AlarmRingScheduler.scheduleTimerEnd(endTime: endTime);
     // Live countdown in the notification — survives closing the app.
-    NotificationService.showTimerRunning(endTime: endTime);
+    await NotificationService.showTimerRunning(endTime: endTime);
     _startTicker();
     _saveState(endTime: endTime);
     setState(() {});
@@ -412,7 +583,7 @@ class _TimerTabState extends State<_TimerTab> {
   void _pause() {
     _ticker?.cancel();
     _ticker = null;
-    NotificationService.cancelTimerEnd();
+    AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
     _saveState(pausedRemaining: _remainingSeconds);
     setState(() {});
@@ -421,7 +592,7 @@ class _TimerTabState extends State<_TimerTab> {
   void _reset() {
     _ticker?.cancel();
     _ticker = null;
-    NotificationService.cancelTimerEnd();
+    AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
     _clearState();
     setState(() => _remainingSeconds = _totalSeconds);
@@ -433,23 +604,14 @@ class _TimerTabState extends State<_TimerTab> {
     NotificationService.cancelTimerRunning();
     _clearState();
     setState(() => _remainingSeconds = 0);
-    // The end-of-timer notification (full-screen) rings; the snackbar is a
-    // fallback on platforms without full-screen intents.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('⏱️ Timer finished!'),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12))),
-      ),
-    );
+    // The alarm plugin's full-screen ring takes over from here (opened via
+    // Alarm.ringing in main.dart), so no local snackbar is needed.
   }
 
   void _setDuration(int seconds) {
     _ticker?.cancel();
     _ticker = null;
-    NotificationService.cancelTimerEnd();
+    AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
     _clearState();
     setState(() {
@@ -549,11 +711,11 @@ class _TimerTabState extends State<_TimerTab> {
   @override
   void dispose() {
     _ticker?.cancel();
-    // If the timer is still running, LEAVE the end-of-timer notification and
-    // the chronometer notification alone — the timer must keep ringing even
+    // If the timer is still running, LEAVE the end-of-timer alarm and the
+    // chronometer notification alone — the timer must keep ringing even
     // after this screen (or the app) is disposed. Only clean up when stopped.
     if (_ticker == null) {
-      NotificationService.cancelTimerEnd();
+      AlarmRingScheduler.stopTimer();
       NotificationService.cancelTimerRunning();
     }
     super.dispose();

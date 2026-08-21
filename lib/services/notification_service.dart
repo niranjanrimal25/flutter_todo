@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -6,19 +5,25 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
 import '../models/todo.dart';
-import '../models/alarm.dart';
 import '../utils/constants.dart' as app;
 
+/// Handles the "soft" notifications (todo reminders, pending-task nudge, the
+/// running-timer chronometer). Real alarm/timer RINGING is delegated to the
+/// `alarm` plugin via [AlarmRingScheduler] so it can loop sound and vibrate
+/// from a foreground service even when the app is killed.
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  // Notification ID namespaces so todos, alarms and the timer never collide.
-  static const int _alarmIdBase = 100000;
-  static const int _timerNotificationId = 200000;
   static const int _timerRunningId = 200001;
   static const int _pendingReminderId = 300000;
-  static const int _snoozeIdBase = 400000;
+
+  /// Legacy notification IDs used by the previous flutter_local_notifications
+  /// based alarm implementation. Kept only to clean up schedules that were
+  /// created by older app versions (daily alarm ids were 100000 + alarm id,
+  /// the timer-end id was 200000).
+  static const int _legacyAlarmIdBase = 100000;
+  static const int _legacyTimerEndId = 200000;
 
   static void Function(String payload)? _onNotificationTap;
 
@@ -58,9 +63,7 @@ class NotificationService {
     await _requestPermissions();
   }
 
-  /// Runs in a background isolate when the app is not running. Full-screen
-  /// intents bring the app to the foreground, where the foreground handler
-  /// opens the ring screen, so nothing else is needed here.
+  /// Runs in a background isolate when the app is not running.
   @pragma('vm:entry-point')
   static Future<void> notificationTapBackground(
       NotificationResponse response) async {
@@ -110,10 +113,6 @@ class NotificationService {
 
     final scheduledDate = tz.TZDateTime.from(todo.reminderTime!, tz.local);
 
-    debugPrint('=== SCHEDULING NOTIFICATION ===');
-    debugPrint('Todo: ${todo.title}');
-    debugPrint('Scheduled for: $scheduledDate');
-
     final androidDetails = AndroidNotificationDetails(
       'todo_reminders',
       'Todo Reminders',
@@ -125,8 +124,6 @@ class NotificationService {
       icon: '@mipmap/ic_launcher',
       playSound: true,
       enableVibration: true,
-      // A todo reminder shouldn't hijack the whole screen; full-screen
-      // intents are also restricted by Play Store policy.
       fullScreenIntent: false,
       category: AndroidNotificationCategory.reminder,
       visibility: NotificationVisibility.public,
@@ -155,78 +152,11 @@ class NotificationService {
     }
   }
 
-  // ===== Alarms =====
+  // ===== Running-timer chronometer =====
 
-  static Future<void> scheduleDailyAlarm({required Alarm alarm}) async {
-    final alarmId = alarm.id;
-    if (alarmId == null) return;
-
-    final notificationId = _alarmIdBase + alarmId;
-    await cancelNotification(notificationId);
-
-    final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(
-        tz.local, now.year, now.month, now.day, alarm.hour, alarm.minute);
-    if (!scheduled.isAfter(now)) {
-      scheduled = scheduled.add(const Duration(days: 1));
-    }
-
-    final label = alarm.label.isEmpty ? 'Alarm' : alarm.label;
-    final details = _alarmNotificationDetails(label);
-
-    try {
-      await _notifications.zonedSchedule(
-        id: notificationId,
-        title: '⏰ $label',
-        body: 'It\'s ${_formatTime(alarm.hour, alarm.minute)} — time to get up!',
-        scheduledDate: scheduled,
-        notificationDetails: details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        matchDateTimeComponents: DateTimeComponents.time,
-        payload: 'alarm_$alarmId',
-      );
-      debugPrint('✅ Alarm $label scheduled at '
-          '${_formatTime(alarm.hour, alarm.minute)}');
-    } catch (e) {
-      debugPrint('❌ Error scheduling alarm: $e');
-    }
-  }
-
-  static Future<void> cancelAlarm(int alarmId) async {
-    await cancelNotification(_alarmIdBase + alarmId);
-  }
-
-  /// Snoozes an alarm by scheduling another (full-screen) alarm in a few
-  /// minutes.
-  static Future<void> snoozeAlarm({int alarmId = 0, int minutes = 5}) async {
-    final notificationId = _snoozeIdBase + alarmId;
-    await cancelNotification(notificationId);
-
-    final scheduledDate =
-        tz.TZDateTime.now(tz.local).add(Duration(minutes: minutes));
-    final details = _alarmNotificationDetails('Alarm');
-
-    try {
-      await _notifications.zonedSchedule(
-        id: notificationId,
-        title: '⏰ Alarm (snoozed)',
-        body: 'Snoozed for $minutes minutes — time to get up!',
-        scheduledDate: scheduledDate,
-        notificationDetails: details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'alarm_$alarmId',
-      );
-      debugPrint('✅ Alarm snoozed +$minutes minutes');
-    } catch (e) {
-      debugPrint('❌ Error snoozing alarm: $e');
-    }
-  }
-
-  // ===== Timer =====
-
-  /// Shows an ongoing notification with a LIVE countdown (Android
-  /// chronometer). It survives the app being closed and counts down from the
-  /// system side.
+  /// Ongoing notification with a LIVE countdown (Android chronometer). It
+  /// survives the app being closed and counts down from the system side. The
+  /// actual end-of-timer RING is handled by AlarmRingScheduler.
   static Future<void> showTimerRunning({required DateTime endTime}) async {
     await cancelNotification(_timerRunningId);
 
@@ -275,33 +205,6 @@ class NotificationService {
 
   static Future<void> cancelTimerRunning() async {
     await cancelNotification(_timerRunningId);
-  }
-
-  /// Schedules the end-of-timer full-screen alarm.
-  static Future<void> scheduleTimerEnd(Duration duration) async {
-    await cancelNotification(_timerNotificationId);
-    final scheduledDate = tz.TZDateTime.now(tz.local).add(duration);
-
-    final details = _alarmNotificationDetails('Timer Finished');
-
-    try {
-      await _notifications.zonedSchedule(
-        id: _timerNotificationId,
-        title: '⏱️ Timer Finished',
-        body: 'Your timer is up!',
-        scheduledDate: scheduledDate,
-        notificationDetails: details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'timer',
-      );
-      debugPrint('✅ Timer end notification scheduled');
-    } catch (e) {
-      debugPrint('❌ Error scheduling timer notification: $e');
-    }
-  }
-
-  static Future<void> cancelTimerEnd() async {
-    await cancelNotification(_timerNotificationId);
   }
 
   // ===== Pending-task nudge (every ~5 hours) =====
@@ -353,46 +256,20 @@ class NotificationService {
     }
   }
 
-  // ===== Shared ring-style details (alarm + timer end) =====
+  // ===== Legacy cleanup (pre-alarm-plugin schedules) =====
 
-  /// Full-screen intent + alarm audio usage + looping-friendly sound, so the
-  /// phone actually RINGS and wakes the screen for both alarms and timers.
-  static NotificationDetails _alarmNotificationDetails(String label) {
-    final androidDetails = AndroidNotificationDetails(
-      // NOTE: channel id intentionally differs from the old 'alarms' channel.
-      // Android caches a channel's sound once it is created, so the custom
-      // alarm tone needs a fresh channel to take effect for existing installs.
-      'alarms_ring',
-      'Alarms & Timer',
-      channelDescription: 'Alarm and timer notifications',
-      importance: Importance.max,
-      priority: Priority.max,
-      icon: '@mipmap/ic_launcher',
-      // Play the bundled alarm tone from the notification itself, so it
-      // rings even when the app is fully closed and the full-screen intent
-      // cannot launch (or is not granted). The RingScreen then loops the
-      // same tone when it opens.
-      sound: const RawResourceAndroidNotificationSound('alarm'),
-      playSound: true,
-      enableVibration: true,
-      fullScreenIntent: true,
-      category: AndroidNotificationCategory.alarm,
-      audioAttributesUsage: AudioAttributesUsage.alarm,
-      visibility: NotificationVisibility.public,
-      vibrationPattern: Int64List.fromList([1000, 500, 1000, 500, 1000]),
-    );
-    const darwinDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentSound: true,
-      presentBadge: true,
-      interruptionLevel: InterruptionLevel.timeSensitive,
-    );
-    return NotificationDetails(
-      android: androidDetails,
-      iOS: darwinDetails,
-      macOS: darwinDetails,
-    );
+  /// Cancels the daily-alarm notification that old versions scheduled via
+  /// flutter_local_notifications (id = 100000 + alarm id).
+  static Future<void> cancelLegacyAlarmNotification(int alarmId) async {
+    await cancelNotification(_legacyAlarmIdBase + alarmId);
   }
+
+  /// Cancels the old timer-end notification (id 200000).
+  static Future<void> cancelLegacyTimerEnd() async {
+    await cancelNotification(_legacyTimerEndId);
+  }
+
+  // ===== Helpers =====
 
   static String _formatTime(int hour, int minute) {
     final period = hour < 12 ? 'AM' : 'PM';
@@ -400,8 +277,6 @@ class NotificationService {
     final m = minute.toString().padLeft(2, '0');
     return '$h:$m $period';
   }
-
-  // ===== Helpers =====
 
   static Future<NotificationAppLaunchDetails?>
       getNotificationLaunchDetails() async {

@@ -1,22 +1,27 @@
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+
+import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
-import '../services/notification_service.dart';
+import '../services/alarm_scheduler.dart';
 import '../utils/constants.dart';
 
-/// Full-screen ring screen shown when an alarm or a timer fires. Plays a
-/// looping alarm sound and wakes the screen (full-screen intent on Android).
+/// Full-screen ring screen shown when an alarm or a timer fires.
+///
+/// The actual RINGING (looping sound + continuous vibration) is performed by
+/// the alarm plugin's foreground service, which keeps going even if this
+/// screen (or the whole app) is dismissed without pressing Stop. This screen
+/// only gives the user the controls: Stop (with daily re-arm) and Snooze.
 class RingScreen extends StatefulWidget {
+  final AlarmSettings alarmSettings;
   final bool isAlarm;
   final String title;
-  final String message;
   final VoidCallback? onClosed;
 
   const RingScreen({
     super.key,
+    required this.alarmSettings,
     required this.isAlarm,
     this.title = '',
-    this.message = '',
     this.onClosed,
   });
 
@@ -25,42 +30,47 @@ class RingScreen extends StatefulWidget {
 }
 
 class _RingScreenState extends State<RingScreen> {
-  final AudioPlayer _player = AudioPlayer();
-  bool _started = false;
+  Map<String, dynamic>? _payload;
 
   @override
   void initState() {
     super.initState();
-    _startRinging();
+    _payload = _parsePayload(widget.alarmSettings.payload);
   }
 
-  Future<void> _startRinging() async {
-    if (kIsWeb) return;
+  Map<String, dynamic>? _parsePayload(String? payload) {
+    if (payload == null || payload.isEmpty) return null;
     try {
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.setVolume(1.0);
-      await _player.play(AssetSource('sounds/alarm.wav'));
-      if (mounted) setState(() => _started = true);
-    } catch (e) {
-      debugPrint('⚠️ Could not play alarm sound: $e');
-    }
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {}
+    return null;
   }
 
-  void _stopRinging() {
-    _player.stop();
-  }
+  String get _label =>
+      (_payload?['label'] as String?)?.trim().isNotEmpty == true
+          ? _payload!['label'] as String
+          : (widget.title.isNotEmpty ? widget.title : 'Alarm');
 
-  void _dismiss() {
-    _stopRinging();
+  String get _ringtone => (_payload?['ring'] as String?) ??
+      AlarmRingScheduler.ringtones.first.asset;
+
+  Future<void> _stop() async {
+    await AlarmRingScheduler.stop(widget.alarmSettings.id);
+    _rearmIfDaily();
     widget.onClosed?.call();
-    Navigator.of(context).maybePop();
+    if (mounted) Navigator.of(context).maybePop();
   }
 
-  void _snooze() {
-    _stopRinging();
-    NotificationService.snoozeAlarm(minutes: 5);
+  Future<void> _snooze() async {
+    await AlarmRingScheduler.snooze(
+      alarmId: widget.alarmSettings.id,
+      label: _label,
+      ringtone: _ringtone,
+      minutes: 5,
+    );
     widget.onClosed?.call();
-    Navigator.of(context).maybePop();
+    if (mounted) Navigator.of(context).maybePop();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -71,10 +81,21 @@ class _RingScreenState extends State<RingScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
+  /// Daily alarms ring again tomorrow at the same time.
+  void _rearmIfDaily() {
+    final daily = _payload?['daily'] == true;
+    if (!daily) return;
+    final h = (_payload?['h'] as num?)?.toInt();
+    final m = (_payload?['m'] as num?)?.toInt();
+    if (h == null || m == null) return;
+
+    AlarmRingScheduler.scheduleDaily(
+      alarmDbId: widget.alarmSettings.id,
+      hour: h,
+      minute: m,
+      label: _label,
+      ringtone: _ringtone,
+    );
   }
 
   @override
@@ -111,25 +132,33 @@ class _RingScreenState extends State<RingScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                widget.title.isNotEmpty
-                    ? widget.title
-                    : widget.isAlarm
-                        ? 'Time to get up!'
-                        : 'Your timer is up!',
+                _label,
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.85),
-                  fontSize: 18,
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 40),
-              if (_started)
-                Text(
+              const SizedBox(height: 32),
+              // Pulsing "ringing" indicator.
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 700),
+                builder: (context, value, child) {
+                  return Opacity(
+                    opacity: 0.5 + 0.5 * value,
+                    child: child,
+                  );
+                },
+                child: Text(
                   '🔔 Ringing…',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 14,
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 15,
                   ),
                 ),
+              ),
               const Spacer(),
               if (widget.isAlarm)
                 OutlinedButton.icon(
@@ -148,13 +177,12 @@ class _RingScreenState extends State<RingScreen> {
                 ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: _dismiss,
+                onPressed: _stop,
                 icon: const Icon(Icons.stop_circle_rounded),
-                label: const Text('Dismiss'),
+                label: const Text('Stop'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.isAlarm
-                      ? AppColors.danger
-                      : AppColors.primary,
+                  backgroundColor:
+                      widget.isAlarm ? AppColors.danger : AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 48, vertical: 16),

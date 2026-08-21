@@ -6,7 +6,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -41,7 +41,8 @@ class StorageService {
             hour INTEGER NOT NULL,
             minute INTEGER NOT NULL,
             label TEXT DEFAULT 'Alarm',
-            isEnabled INTEGER NOT NULL DEFAULT 1
+            isEnabled INTEGER NOT NULL DEFAULT 1,
+            ringtone TEXT NOT NULL DEFAULT 'assets/sounds/alarm.wav'
           )
         ''');
         await _createAppStateTable(db);
@@ -54,12 +55,18 @@ class StorageService {
               hour INTEGER NOT NULL,
               minute INTEGER NOT NULL,
               label TEXT DEFAULT 'Alarm',
-              isEnabled INTEGER NOT NULL DEFAULT 1
+              isEnabled INTEGER NOT NULL DEFAULT 1,
+              ringtone TEXT NOT NULL DEFAULT 'assets/sounds/alarm.wav'
             )
           ''');
         }
         if (oldVersion < 3) {
           await _createAppStateTable(db);
+        }
+        if (oldVersion < 4) {
+          await db.execute('''
+            ALTER TABLE alarms ADD COLUMN ringtone TEXT NOT NULL DEFAULT 'assets/sounds/alarm.wav'
+          ''');
         }
       },
     );

@@ -86,6 +86,7 @@ void main() {
         minute: 30,
         label: 'Wake up',
         isEnabled: true,
+        ringtone: 'assets/sounds/chime.wav',
       );
 
       final restored = Alarm.fromMap(alarm.toMap());
@@ -95,6 +96,7 @@ void main() {
       expect(restored.minute, 30);
       expect(restored.label, 'Wake up');
       expect(restored.isEnabled, isTrue);
+      expect(restored.ringtone, 'assets/sounds/chime.wav');
     });
 
     test('fromMap uses defaults for missing optional fields', () {
@@ -107,17 +109,23 @@ void main() {
 
       expect(restored.label, 'Alarm');
       expect(restored.isEnabled, isFalse);
+      expect(restored.ringtone, 'assets/sounds/alarm.wav');
     });
 
     test('copyWith overrides only the provided fields', () {
       final alarm = Alarm(id: 1, hour: 7, minute: 0, label: 'A');
-      final updated = alarm.copyWith(hour: 8, isEnabled: false);
+      final updated = alarm.copyWith(
+        hour: 8,
+        isEnabled: false,
+        ringtone: 'assets/sounds/siren.wav',
+      );
 
       expect(updated.id, 1);
       expect(updated.hour, 8);
       expect(updated.minute, 0);
       expect(updated.label, 'A');
       expect(updated.isEnabled, isFalse);
+      expect(updated.ringtone, 'assets/sounds/siren.wav');
     });
 
     test('minutesOfDay allows sorting by time of day', () {

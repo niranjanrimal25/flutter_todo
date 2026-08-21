@@ -4,6 +4,8 @@ class Alarm {
   int minute;
   String label;
   bool isEnabled;
+  /// Path to the bundled ringtone asset (see AlarmRingScheduler.ringtones).
+  String ringtone;
 
   Alarm({
     this.id,
@@ -11,6 +13,7 @@ class Alarm {
     required this.minute,
     this.label = 'Alarm',
     this.isEnabled = true,
+    this.ringtone = 'assets/sounds/alarm.wav',
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +23,7 @@ class Alarm {
       'minute': minute,
       'label': label,
       'isEnabled': isEnabled ? 1 : 0,
+      'ringtone': ringtone,
     };
   }
 
@@ -30,6 +34,7 @@ class Alarm {
       minute: map['minute'] as int,
       label: (map['label'] as String?) ?? 'Alarm',
       isEnabled: (map['isEnabled'] as int) == 1,
+      ringtone: (map['ringtone'] as String?) ?? 'assets/sounds/alarm.wav',
     );
   }
 
@@ -39,6 +44,7 @@ class Alarm {
     int? minute,
     String? label,
     bool? isEnabled,
+    String? ringtone,
   }) {
     return Alarm(
       id: id ?? this.id,
@@ -46,6 +52,7 @@ class Alarm {
       minute: minute ?? this.minute,
       label: label ?? this.label,
       isEnabled: isEnabled ?? this.isEnabled,
+      ringtone: ringtone ?? this.ringtone,
     );
   }
 

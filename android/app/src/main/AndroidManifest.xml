@@ -1,11 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <!-- Full-screen intents (alarm/timer ring screens) — Android 14+ -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!-- Required by the alarm plugin's foreground service (ringing) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <!-- Let the user exempt the app from battery optimization (Doze) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="Niranjan Todo"
         android:name="${applicationName}"
@@ -18,9 +26,7 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true">
+            android:windowSoftInputMode="adjustResize">
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -29,11 +35,11 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <intent-filter>
-                <action android:name="com.dexterous.flutterlocalnotifications.FULL_SCREEN_INTENT_ACTION"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-            </intent-filter>
         </activity>
+        <!-- The alarm plugin's foreground service keeps sound + vibration
+             looping until the user stops the alarm, even when the app is
+             killed. -->
+        <service android:name="com.gdelataillade.alarm.services.NotificationOnKillService" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
