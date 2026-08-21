@@ -6,8 +6,8 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 
 - ✅ Create, edit, delete, and complete tasks
 - 🔔 Local notifications for task reminders (with exact-alarm scheduling on Android)
-- ⏰ **Alarm section** — set daily repeating alarms with labels; they ring even when the app is closed
-- ⏱️ **Timer section** — countdown timer with presets (1–30 min); a notification rings when it finishes
+- ⏰ **Alarm section** — set daily repeating alarms with labels; they **ring** (full-screen alarm with looping sound) even when the app is closed
+- ⏱️ **Timer section** — countdown timer with presets (up to 2 hours) plus a **custom hours/minutes** option; a **live countdown stays in the notification** when the app is closed, and it **rings** when finished
 - 📅 **Nepali (Bikram Sambat) calendar** — pick due dates with the Nepali date picker
 - 🇳🇵 Nepali dates shown in Devanagari digits and month names
 - 🏷️ Priorities (Low / Medium / High), categories, and search

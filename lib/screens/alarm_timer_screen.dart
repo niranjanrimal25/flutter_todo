@@ -305,7 +305,9 @@ class _TimerTab extends StatefulWidget {
 }
 
 class _TimerTabState extends State<_TimerTab> {
-  static const List<int> _presetMinutes = [1, 3, 5, 10, 15, 30];
+  static const List<int> _presetMinutes = [
+    1, 3, 5, 10, 15, 30, 45, 60, 90, 120,
+  ];
 
   int _totalSeconds = 300;
   int _remainingSeconds = 300;
@@ -313,10 +315,19 @@ class _TimerTabState extends State<_TimerTab> {
 
   bool get _isRunning => _ticker != null;
 
+  bool get _isCustomDuration {
+    if (_totalSeconds <= 0) return false;
+    final minutes = _totalSeconds ~/ 60;
+    return (_totalSeconds % 60) != 0 || !_presetMinutes.contains(minutes);
+  }
+
   void _start() {
     if (_remainingSeconds <= 0) return;
     _ticker?.cancel();
+    final endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
     NotificationService.scheduleTimerEnd(Duration(seconds: _remainingSeconds));
+    // Live countdown in the notification — survives closing the app.
+    NotificationService.showTimerRunning(endTime: endTime);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_remainingSeconds <= 1) {
         _finish();
@@ -331,6 +342,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker?.cancel();
     _ticker = null;
     NotificationService.cancelTimerEnd();
+    NotificationService.cancelTimerRunning();
     setState(() {});
   }
 
@@ -338,31 +350,117 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker?.cancel();
     _ticker = null;
     NotificationService.cancelTimerEnd();
+    NotificationService.cancelTimerRunning();
     setState(() => _remainingSeconds = _totalSeconds);
   }
 
   void _finish() {
     _ticker?.cancel();
     _ticker = null;
+    NotificationService.cancelTimerRunning();
     setState(() => _remainingSeconds = 0);
+    // The end-of-timer notification (full-screen) rings; the snackbar is a
+    // fallback on platforms without full-screen intents.
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('⏱️ Timer finished!'),
         backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12))),
       ),
     );
   }
 
-  void _setPreset(int minutes) {
+  void _setDuration(int seconds) {
     _ticker?.cancel();
     _ticker = null;
     NotificationService.cancelTimerEnd();
+    NotificationService.cancelTimerRunning();
     setState(() {
-      _totalSeconds = minutes * 60;
-      _remainingSeconds = minutes * 60;
+      _totalSeconds = seconds;
+      _remainingSeconds = seconds;
     });
+  }
+
+  Future<void> _pickCustomDuration() async {
+    int hours = _totalSeconds ~/ 3600;
+    int minutes = (_totalSeconds % 3600) ~/ 60;
+    if (_totalSeconds <= 0) {
+      hours = 0;
+      minutes = 5;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text('Custom Timer'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: hours,
+                  decoration: const InputDecoration(
+                    labelText: 'Hours',
+                    prefixIcon:
+                        Icon(Icons.schedule_rounded, color: AppColors.primary),
+                  ),
+                  items: List.generate(
+                    24,
+                    (i) => DropdownMenuItem(value: i, child: Text('$i hour${i == 1 ? '' : 's'}')),
+                  ),
+                  onChanged: (v) =>
+                      setDialogState(() => hours = v ?? 0),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: minutes,
+                  decoration: const InputDecoration(
+                    labelText: 'Minutes',
+                    prefixIcon:
+                        Icon(Icons.timer_rounded, color: AppColors.primary),
+                  ),
+                  items: List.generate(
+                    60,
+                    (i) => DropdownMenuItem(value: i, child: Text('$i min')),
+                  ),
+                  onChanged: (v) =>
+                      setDialogState(() => minutes = v ?? 0),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final total = hours * 3600 + minutes * 60;
+                  if (total > 0) {
+                    _setDuration(total);
+                    Navigator.pop(dialogContext);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Start'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   String _format(int seconds) {
@@ -377,6 +475,7 @@ class _TimerTabState extends State<_TimerTab> {
   void dispose() {
     _ticker?.cancel();
     NotificationService.cancelTimerEnd();
+    NotificationService.cancelTimerRunning();
     super.dispose();
   }
 
@@ -459,26 +558,44 @@ class _TimerTabState extends State<_TimerTab> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _presetMinutes.map((minutes) {
-            final isSelected = _totalSeconds == minutes * 60;
-            return ChoiceChip(
-              label: Text('$minutes min'),
-              selected: isSelected,
-              onSelected: (_) => _setPreset(minutes),
+          children: [
+            ..._presetMinutes.map((minutes) {
+              final isSelected = _totalSeconds == minutes * 60;
+              return ChoiceChip(
+                label: Text('$minutes min'),
+                selected: isSelected,
+                onSelected: (_) => _setDuration(minutes * 60),
+                selectedColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  color: isSelected
+                      ? Colors.white
+                      : isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.textGrey,
+                  fontWeight: FontWeight.w500,
+                ),
+                backgroundColor:
+                    isDark ? AppColors.darkCard : AppColors.cardWhite,
+                showCheckmark: false,
+              );
+            }),
+            ChoiceChip(
+              label: const Text('Custom…'),
+              selected: _isCustomDuration,
+              onSelected: (_) => _pickCustomDuration(),
               selectedColor: AppColors.primary,
               labelStyle: TextStyle(
-                color: isSelected
+                color: _isCustomDuration
                     ? Colors.white
                     : isDark
                         ? AppColors.darkTextSecondary
                         : AppColors.textGrey,
                 fontWeight: FontWeight.w500,
               ),
-              backgroundColor:
-                  isDark ? AppColors.darkCard : AppColors.cardWhite,
+              backgroundColor: isDark ? AppColors.darkCard : AppColors.cardWhite,
               showCheckmark: false,
-            );
-          }).toList(),
+            ),
+          ],
         ),
         const SizedBox(height: 32),
         Row(

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -14,9 +15,17 @@ class NotificationService {
   // Notification ID namespaces so todos, alarms and the timer never collide.
   static const int _alarmIdBase = 100000;
   static const int _timerNotificationId = 200000;
+  static const int _timerRunningId = 200001;
   static const int _pendingReminderId = 300000;
+  static const int _snoozeIdBase = 400000;
 
-  static Future<void> initialize() async {
+  static void Function(String payload)? _onNotificationTap;
+
+  static Future<void> initialize({
+    void Function(String payload)? onNotificationTap,
+  }) async {
+    _onNotificationTap = onNotificationTap;
+
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Kathmandu'));
 
@@ -40,10 +49,21 @@ class NotificationService {
       settings: initSettings,
       onDidReceiveNotificationResponse: (details) {
         debugPrint('Notification tapped: ${details.payload}');
+        _onNotificationTap?.call(details.payload ?? '');
       },
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
     await _requestPermissions();
+  }
+
+  /// Runs in a background isolate when the app is not running. Full-screen
+  /// intents bring the app to the foreground, where the foreground handler
+  /// opens the ring screen, so nothing else is needed here.
+  @pragma('vm:entry-point')
+  static Future<void> notificationTapBackground(
+      NotificationResponse response) async {
+    debugPrint('Background notification tap: ${response.payload}');
   }
 
   static Future<void> _requestPermissions() async {
@@ -92,9 +112,6 @@ class NotificationService {
     debugPrint('=== SCHEDULING NOTIFICATION ===');
     debugPrint('Todo: ${todo.title}');
     debugPrint('Scheduled for: $scheduledDate');
-    debugPrint('Current time: ${tz.TZDateTime.now(tz.local)}');
-    debugPrint(
-        'Difference: ${scheduledDate.difference(DateTime.now()).inMinutes} minutes');
 
     final androidDetails = AndroidNotificationDetails(
       'todo_reminders',
@@ -153,13 +170,13 @@ class NotificationService {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
-    final details = _alarmNotificationDetails(
-        alarm.label.isEmpty ? 'Alarm' : alarm.label);
+    final label = alarm.label.isEmpty ? 'Alarm' : alarm.label;
+    final details = _alarmNotificationDetails(label);
 
     try {
       await _notifications.zonedSchedule(
         id: notificationId,
-        title: '⏰ ${alarm.label.isEmpty ? 'Alarm' : alarm.label}',
+        title: '⏰ $label',
         body: 'It\'s ${_formatTime(alarm.hour, alarm.minute)} — time to get up!',
         scheduledDate: scheduled,
         notificationDetails: details,
@@ -167,7 +184,7 @@ class NotificationService {
         matchDateTimeComponents: DateTimeComponents.time,
         payload: 'alarm_$alarmId',
       );
-      debugPrint('✅ Alarm ${alarm.label} scheduled at '
+      debugPrint('✅ Alarm $label scheduled at '
           '${_formatTime(alarm.hour, alarm.minute)}');
     } catch (e) {
       debugPrint('❌ Error scheduling alarm: $e');
@@ -178,8 +195,88 @@ class NotificationService {
     await cancelNotification(_alarmIdBase + alarmId);
   }
 
+  /// Snoozes an alarm by scheduling another (full-screen) alarm in a few
+  /// minutes.
+  static Future<void> snoozeAlarm({int alarmId = 0, int minutes = 5}) async {
+    final notificationId = _snoozeIdBase + alarmId;
+    await cancelNotification(notificationId);
+
+    final scheduledDate =
+        tz.TZDateTime.now(tz.local).add(Duration(minutes: minutes));
+    final details = _alarmNotificationDetails('Alarm');
+
+    try {
+      await _notifications.zonedSchedule(
+        id: notificationId,
+        title: '⏰ Alarm (snoozed)',
+        body: 'Snoozed for $minutes minutes — time to get up!',
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'alarm_$alarmId',
+      );
+      debugPrint('✅ Alarm snoozed +$minutes minutes');
+    } catch (e) {
+      debugPrint('❌ Error snoozing alarm: $e');
+    }
+  }
+
   // ===== Timer =====
 
+  /// Shows an ongoing notification with a LIVE countdown (Android
+  /// chronometer). It survives the app being closed and counts down from the
+  /// system side.
+  static Future<void> showTimerRunning({required DateTime endTime}) async {
+    await cancelNotification(_timerRunningId);
+
+    final androidDetails = AndroidNotificationDetails(
+      'timer_running',
+      'Timer Running',
+      channelDescription: 'Shows the running countdown timer',
+      importance: Importance.low,
+      priority: Priority.low,
+      icon: '@mipmap/ic_launcher',
+      playSound: false,
+      enableVibration: false,
+      ongoing: true,
+      autoCancel: false,
+      onlyAlertOnce: true,
+      usesChronometer: true,
+      chronometerCountDown: true,
+      when: endTime.millisecondsSinceEpoch,
+      category: AndroidNotificationCategory.progress,
+      visibility: NotificationVisibility.public,
+      styleInformation: BigTextStyleInformation(
+        'Timer ends at ${_formatTime(endTime.hour, endTime.minute)}',
+      ),
+    );
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: false,
+      presentSound: false,
+      presentBadge: false,
+    );
+    const details =
+        NotificationDetails(android: androidDetails, iOS: darwinDetails);
+
+    try {
+      await _notifications.show(
+        id: _timerRunningId,
+        title: '⏱️ Timer running',
+        body: 'Counting down…',
+        notificationDetails: details,
+        payload: 'timer_running',
+      );
+      debugPrint('✅ Timer running notification shown');
+    } catch (e) {
+      debugPrint('❌ Error showing timer notification: $e');
+    }
+  }
+
+  static Future<void> cancelTimerRunning() async {
+    await cancelNotification(_timerRunningId);
+  }
+
+  /// Schedules the end-of-timer full-screen alarm.
   static Future<void> scheduleTimerEnd(Duration duration) async {
     await cancelNotification(_timerNotificationId);
     final scheduledDate = tz.TZDateTime.now(tz.local).add(duration);
@@ -255,21 +352,37 @@ class NotificationService {
     }
   }
 
+  // ===== Shared ring-style details (alarm + timer end) =====
+
+  /// Full-screen intent + alarm audio usage + looping-friendly sound, so the
+  /// phone actually RINGS and wakes the screen for both alarms and timers.
   static NotificationDetails _alarmNotificationDetails(String label) {
     final androidDetails = AndroidNotificationDetails(
       'alarms',
       'Alarms & Timer',
       channelDescription: 'Alarm and timer notifications',
       importance: Importance.max,
-      priority: Priority.high,
+      priority: Priority.max,
       icon: '@mipmap/ic_launcher',
       playSound: true,
       enableVibration: true,
-      fullScreenIntent: false,
+      fullScreenIntent: true,
       category: AndroidNotificationCategory.alarm,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
+      vibrationPattern: const [1000, 500, 1000, 500, 1000],
     );
-    return NotificationDetails(android: androidDetails);
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+      presentBadge: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+    return const NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
   }
 
   static String _formatTime(int hour, int minute) {
@@ -280,6 +393,11 @@ class NotificationService {
   }
 
   // ===== Helpers =====
+
+  static Future<NotificationAppLaunchDetails?>
+      getNotificationLaunchDetails() async {
+    return _notifications.getNotificationAppLaunchDetails();
+  }
 
   static Future<void> showTestNotification() async {
     const androidDetails = AndroidNotificationDetails(
