@@ -32,24 +32,33 @@ class TodoCard extends StatelessWidget {
     }) {
       return CustomSlidableAction(
         onPressed: (_) => onPressed(),
-        backgroundColor: color,
-        borderRadius: BorderRadius.circular(10),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        // Transparent pane background — the colored pill below is the actual
+        // small button, so actions no longer fill the whole card height.
+        backgroundColor: Colors.transparent,
+        padding: EdgeInsets.zero,
         alignment: Alignment.center,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18, color: Colors.white),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: Colors.white),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -59,6 +68,9 @@ class TodoCard extends StatelessWidget {
       child: Slidable(
         endActionPane: ActionPane(
           motion: const DrawerMotion(),
+          // Reveal a narrow strip so the two compact pills sit side by side
+          // without covering the whole card.
+          extentRatio: 0.45,
           children: [
             compactAction(
               icon: Icons.edit_rounded,
