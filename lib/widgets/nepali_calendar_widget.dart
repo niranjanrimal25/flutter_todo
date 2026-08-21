@@ -48,10 +48,11 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.cardWhite,
+        color: isDark ? AppColors.darkCard : AppColors.cardWhite,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -145,6 +146,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
   }
 
   Widget _buildDayLabels() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
       child: Row(
@@ -159,7 +161,11 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isSaturday ? AppColors.danger : AppColors.textGrey,
+                color: isSaturday
+                    ? AppColors.danger
+                    : isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textGrey,
               ),
             ),
           );
@@ -255,6 +261,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
     VoidCallback? onTap,
     Key? cellKey,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       key: cellKey,
       onTap: onTap,
@@ -282,12 +289,14 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
                   ? FontWeight.bold
                   : FontWeight.normal,
               color: !isCurrentMonth
-                  ? AppColors.textLight
+                  ? (isDark ? AppColors.darkTextSecondary : AppColors.textLight)
                   : isSelected
                       ? Colors.white
                       : isSaturday
                           ? AppColors.danger
-                          : AppColors.textDark,
+                          : isDark
+                              ? AppColors.darkTextPrimary
+                              : AppColors.textDark,
             ),
           ),
         ),

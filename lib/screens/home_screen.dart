@@ -8,6 +8,7 @@ import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/todo_card.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/nepali_calendar_widget.dart';
 import 'add_edit_todo_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -357,33 +358,40 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context, provider, _) {
         final todos = provider.todos;
 
-        if (todos.isEmpty) {
-          return const EmptyState();
-        }
-
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          child: ListView.builder(
+          child: ListView(
             key: ValueKey(provider.currentFilter),
             padding: const EdgeInsets.only(bottom: 100),
-            itemCount: todos.length,
-            itemBuilder: (context, index) {
-              final todo = todos[index];
-              return AnimatedSlide(
-                offset: Offset.zero,
-                duration: Duration(milliseconds: 300 + (index * 50)),
-                child: AnimatedOpacity(
-                  opacity: 1.0,
-                  duration: Duration(milliseconds: 300 + (index * 50)),
-                  child: TodoCard(
-                    todo: todo,
-                    onToggle: () => provider.toggleTodo(todo.id!),
-                    onEdit: () => _navigateToAddEdit(context, todo: todo),
-                    onDelete: () => _showDeleteDialog(context, todo.id!),
-                  ),
-                ),
-              );
-            },
+            children: [
+              // Nepali (Bikram Sambat) calendar — scrolls with the task list.
+              const NepaliCalendarWidget(),
+              const SizedBox(height: 8),
+              if (todos.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 48),
+                  child: EmptyState(),
+                )
+              else
+                ...todos.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final todo = entry.value;
+                  return AnimatedSlide(
+                    offset: Offset.zero,
+                    duration: Duration(milliseconds: 300 + (index * 50)),
+                    child: AnimatedOpacity(
+                      opacity: 1.0,
+                      duration: Duration(milliseconds: 300 + (index * 50)),
+                      child: TodoCard(
+                        todo: todo,
+                        onToggle: () => provider.toggleTodo(todo.id!),
+                        onEdit: () => _navigateToAddEdit(context, todo: todo),
+                        onDelete: () => _showDeleteDialog(context, todo.id!),
+                      ),
+                    ),
+                  );
+                }).toList(),
+            ],
           ),
         );
       },
