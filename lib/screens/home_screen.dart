@@ -343,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             context.read<TodoProvider>().search('');
                           },
                         )
-                      : null;
+                      : const SizedBox.shrink();
                 },
               ),
             ),
