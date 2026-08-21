@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -255,7 +256,7 @@ class NotificationService {
       presentSound: false,
       presentBadge: false,
     );
-    const details =
+    final details =
         NotificationDetails(android: androidDetails, iOS: darwinDetails);
 
     try {
@@ -370,7 +371,7 @@ class NotificationService {
       category: AndroidNotificationCategory.alarm,
       audioAttributesUsage: AudioAttributesUsage.alarm,
       visibility: NotificationVisibility.public,
-      vibrationPattern: const [1000, 500, 1000, 500, 1000],
+      vibrationPattern: Int64List.fromList([1000, 500, 1000, 500, 1000]),
     );
     const darwinDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -378,7 +379,7 @@ class NotificationService {
       presentBadge: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
     );
-    return const NotificationDetails(
+    return NotificationDetails(
       android: androidDetails,
       iOS: darwinDetails,
       macOS: darwinDetails,
