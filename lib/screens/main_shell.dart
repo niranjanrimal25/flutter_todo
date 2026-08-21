@@ -39,9 +39,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded) return const _AppSplash();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: _loaded ? _buildMain(context) : const _AnimatedAppSplash(),
+    );
+  }
 
+  Widget _buildMain(BuildContext context) {
     return Scaffold(
+      key: const ValueKey('main-shell'),
       body: IndexedStack(
         index: _selectedIndex,
         children: const [
@@ -58,13 +66,14 @@ class _MainShellState extends State<MainShell> {
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.checklist_rounded),
-            selectedIcon: Icon(Icons.checklist_rounded,
-                color: AppColors.primary),
+            selectedIcon:
+                Icon(Icons.checklist_rounded, color: AppColors.primary),
             label: 'Tasks',
           ),
           NavigationDestination(
             icon: Icon(Icons.alarm_rounded),
-            selectedIcon: Icon(Icons.alarm_rounded, color: AppColors.primary),
+            selectedIcon:
+                Icon(Icons.alarm_rounded, color: AppColors.primary),
             label: 'Alarm & Timer',
           ),
         ],
@@ -73,12 +82,45 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-class _AppSplash extends StatelessWidget {
-  const _AppSplash();
+/// Branded splash with a soft intro animation (logo pops in, text fades in,
+/// gentle pulsing ring) that cross-fades into the app when loading finishes.
+class _AnimatedAppSplash extends StatefulWidget {
+  const _AnimatedAppSplash();
+
+  @override
+  State<_AnimatedAppSplash> createState() => _AnimatedAppSplashState();
+}
+
+class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..forward();
+
+  late final Animation<double> _logoScale = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
+  );
+  late final Animation<double> _textFade = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.35, 0.85, curve: Curves.easeOut),
+  );
+  late final Animation<double> _subtitleFade = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.55, 1.0, curve: Curves.easeOut),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: const ValueKey('splash'),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -91,38 +133,66 @@ class _AppSplash extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: const Icon(
-                  Icons.checklist_rounded,
-                  color: Colors.white,
-                  size: 56,
+              // Pulsing soft ring behind the logo.
+              SizedBox(
+                width: 180,
+                height: 180,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _PulseRing(duration: const Duration(milliseconds: 1800)),
+                    ScaleTransition(
+                      scale: _logoScale,
+                      child: Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(26),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.checklist_rounded,
+                          color: AppColors.primary,
+                          size: 58,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Niranjan Todo',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
+              const SizedBox(height: 28),
+              FadeTransition(
+                opacity: _textFade,
+                child: const Text(
+                  'Niranjan Todo',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Tasks • Alarms • Timer',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  fontSize: 14,
-                  letterSpacing: 0.5,
+              const SizedBox(height: 10),
+              FadeTransition(
+                opacity: _subtitleFade,
+                child: Text(
+                  'Tasks  •  Alarms  •  Timer',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 15,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 48),
               const SizedBox(
                 width: 28,
                 height: 28,
@@ -135,6 +205,50 @@ class _AppSplash extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PulseRing extends StatefulWidget {
+  final Duration duration;
+
+  const _PulseRing({required this.duration});
+
+  @override
+  State<_PulseRing> createState() => _PulseRingState();
+}
+
+class _PulseRingState extends State<_PulseRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final t = _controller.value;
+        return Container(
+          width: 96 + 40 * t,
+          height: 96 + 40 * t,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: (1 - t) * 0.45),
+              width: 2,
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -324,11 +324,25 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
       ));
     }
 
+    // Exactly 7 cells per row (one row per week). A Wrap would fit as many
+    // cells as the width allows, showing ~10-11 days in a single row.
+    final rows = <List<Widget>>[];
+    for (var i = 0; i < dayWidgets.length; i += 7) {
+      final end = i + 7 > dayWidgets.length ? dayWidgets.length : i + 7;
+      rows.add(dayWidgets.sublist(i, end));
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Wrap(
-        alignment: WrapAlignment.spaceAround,
-        children: dayWidgets,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final row in rows)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: row,
+            ),
+        ],
       ),
     );
   }

@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/alarm.dart';
+import '../models/timer_state.dart';
 import '../providers/alarm_provider.dart';
 import '../services/notification_service.dart';
+import '../services/storage_service.dart';
 import '../utils/constants.dart';
 import '../widgets/empty_state.dart';
 
@@ -308,6 +311,7 @@ class _TimerTabState extends State<_TimerTab> {
   static const List<int> _presetMinutes = [
     1, 3, 5, 10, 15, 30, 45, 60, 90, 120,
   ];
+  static const String _stateKey = 'timer_state';
 
   int _totalSeconds = 300;
   int _remainingSeconds = 300;
@@ -321,13 +325,53 @@ class _TimerTabState extends State<_TimerTab> {
     return (_totalSeconds % 60) != 0 || !_presetMinutes.contains(minutes);
   }
 
-  void _start() {
-    if (_remainingSeconds <= 0) return;
+  @override
+  void initState() {
+    super.initState();
+    _restoreTimerState();
+  }
+
+  /// Restores a running/paused timer after the app was fully closed, so the
+  /// countdown picks up where it left off (the scheduled end notification
+  /// and the chronometer notification survive independently).
+  Future<void> _restoreTimerState() async {
+    final saved =
+        TimerState.fromJsonString(await StorageService.getAppState(_stateKey));
+    if (saved == null) return;
+
+    final now = DateTime.now();
+    if (saved.isRunning && saved.endTime!.isAfter(now)) {
+      final remaining = saved.endTime!.difference(now).inSeconds;
+      if (!mounted) return;
+      setState(() {
+        _totalSeconds = saved.totalSeconds;
+        _remainingSeconds = remaining;
+      });
+      _startTicker();
+      // Re-show the chronometer notification with the same end time so the
+      // countdown stays in sync.
+      NotificationService.showTimerRunning(endTime: saved.endTime!);
+    } else if (saved.isRunning) {
+      // The timer finished while the app was closed (the full-screen ring
+      // already went off). Clean up and show the finished state.
+      NotificationService.cancelTimerRunning();
+      await StorageService.deleteAppState(_stateKey);
+      if (!mounted) return;
+      setState(() {
+        _totalSeconds = saved.totalSeconds;
+        _remainingSeconds = 0;
+      });
+    } else if (saved.isPaused) {
+      if (!mounted) return;
+      setState(() {
+        _totalSeconds = saved.totalSeconds;
+        _remainingSeconds = saved.pausedRemainingSeconds ?? saved.totalSeconds;
+      });
+    }
+  }
+
+  void _startTicker() {
     _ticker?.cancel();
-    final endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
-    NotificationService.scheduleTimerEnd(Duration(seconds: _remainingSeconds));
-    // Live countdown in the notification — survives closing the app.
-    NotificationService.showTimerRunning(endTime: endTime);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_remainingSeconds <= 1) {
         _finish();
@@ -335,6 +379,27 @@ class _TimerTabState extends State<_TimerTab> {
         setState(() => _remainingSeconds--);
       }
     });
+  }
+
+  Future<void> _saveState({DateTime? endTime, int? pausedRemaining}) async {
+    final state = TimerState(
+      endTime: endTime,
+      pausedRemainingSeconds: pausedRemaining,
+      totalSeconds: _totalSeconds,
+    );
+    await StorageService.saveAppState(_stateKey, jsonEncode(state.toJson()));
+  }
+
+  Future<void> _clearState() => StorageService.deleteAppState(_stateKey);
+
+  void _start() {
+    if (_remainingSeconds <= 0) return;
+    final endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
+    NotificationService.scheduleTimerEnd(Duration(seconds: _remainingSeconds));
+    // Live countdown in the notification — survives closing the app.
+    NotificationService.showTimerRunning(endTime: endTime);
+    _startTicker();
+    _saveState(endTime: endTime);
     setState(() {});
   }
 
@@ -343,6 +408,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker = null;
     NotificationService.cancelTimerEnd();
     NotificationService.cancelTimerRunning();
+    _saveState(pausedRemaining: _remainingSeconds);
     setState(() {});
   }
 
@@ -351,6 +417,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker = null;
     NotificationService.cancelTimerEnd();
     NotificationService.cancelTimerRunning();
+    _clearState();
     setState(() => _remainingSeconds = _totalSeconds);
   }
 
@@ -358,6 +425,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker?.cancel();
     _ticker = null;
     NotificationService.cancelTimerRunning();
+    _clearState();
     setState(() => _remainingSeconds = 0);
     // The end-of-timer notification (full-screen) rings; the snackbar is a
     // fallback on platforms without full-screen intents.
@@ -377,6 +445,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker = null;
     NotificationService.cancelTimerEnd();
     NotificationService.cancelTimerRunning();
+    _clearState();
     setState(() {
       _totalSeconds = seconds;
       _remainingSeconds = seconds;
@@ -474,8 +543,13 @@ class _TimerTabState extends State<_TimerTab> {
   @override
   void dispose() {
     _ticker?.cancel();
-    NotificationService.cancelTimerEnd();
-    NotificationService.cancelTimerRunning();
+    // If the timer is still running, LEAVE the end-of-timer notification and
+    // the chronometer notification alone — the timer must keep ringing even
+    // after this screen (or the app) is disposed. Only clean up when stopped.
+    if (_ticker == null) {
+      NotificationService.cancelTimerEnd();
+      NotificationService.cancelTimerRunning();
+    }
     super.dispose();
   }
 

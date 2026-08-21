@@ -6,7 +6,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -44,6 +44,7 @@ class StorageService {
             isEnabled INTEGER NOT NULL DEFAULT 1
           )
         ''');
+        await _createAppStateTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -57,8 +58,20 @@ class StorageService {
             )
           ''');
         }
+        if (oldVersion < 3) {
+          await _createAppStateTable(db);
+        }
       },
     );
+  }
+
+  static Future<void> _createAppStateTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE app_state(
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   // ===== Todos =====
@@ -126,6 +139,38 @@ class StorageService {
       'alarms',
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  // ===== App state (key/value) =====
+
+  static Future<void> saveAppState(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'app_state',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<String?> getAppState(String key) async {
+    final db = await database;
+    final rows = await db.query(
+      'app_state',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  static Future<void> deleteAppState(String key) async {
+    final db = await database;
+    await db.delete(
+      'app_state',
+      where: 'key = ?',
+      whereArgs: [key],
     );
   }
 }

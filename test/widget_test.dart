@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 
 import 'package:todo_app/models/alarm.dart';
+import 'package:todo_app/models/timer_state.dart';
 import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/utils/constants.dart';
 import 'package:todo_app/widgets/empty_state.dart';
@@ -122,6 +123,40 @@ void main() {
     test('minutesOfDay allows sorting by time of day', () {
       expect(Alarm(hour: 0, minute: 5).minutesOfDay, 5);
       expect(Alarm(hour: 23, minute: 59).minutesOfDay, 1439);
+    });
+  });
+
+  group('TimerState', () {
+    test('round-trips a running timer with end time', () {
+      final endTime = DateTime(2026, 8, 21, 15, 30, 0);
+      final state = TimerState(endTime: endTime, totalSeconds: 900);
+
+      final restored =
+          TimerState.fromJsonString(jsonEncode(state.toJson()));
+
+      expect(restored, isNotNull);
+      expect(restored!.isRunning, isTrue);
+      expect(restored.endTime, endTime);
+      expect(restored.totalSeconds, 900);
+    });
+
+    test('round-trips a paused timer with remaining seconds', () {
+      final state =
+          TimerState(pausedRemainingSeconds: 420, totalSeconds: 600);
+
+      final restored =
+          TimerState.fromJsonString(jsonEncode(state.toJson()));
+
+      expect(restored, isNotNull);
+      expect(restored!.isPaused, isTrue);
+      expect(restored.pausedRemainingSeconds, 420);
+      expect(restored.totalSeconds, 600);
+    });
+
+    test('returns null for empty or malformed input', () {
+      expect(TimerState.fromJsonString(null), isNull);
+      expect(TimerState.fromJsonString(''), isNull);
+      expect(TimerState.fromJsonString('not json'), isNull);
     });
   });
 

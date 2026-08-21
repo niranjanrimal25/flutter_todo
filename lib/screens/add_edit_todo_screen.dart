@@ -164,18 +164,33 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                           ),
                           child: Column(
                             children: [
-                              Icon(p.icon,
-                                  color:
-                                      isSelected ? p.color : AppColors.textGrey,
-                                  size: 22),
-                              const SizedBox(height: 4),
+                              // Colored badge so the priority icon is clearly
+                              // visible for Low / Medium / High.
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: p.color.withValues(alpha: isSelected ? 0.28 : 0.14),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: p.color.withValues(alpha: isSelected ? 0.9 : 0.35),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Icon(
+                                  p.icon,
+                                  color: p.color,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
                               Text(
                                 p.label,
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
                                   color:
                                       isSelected ? p.color : AppColors.textGrey,
                                 ),
