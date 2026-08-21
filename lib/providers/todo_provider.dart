@@ -63,6 +63,7 @@ class TodoProvider extends ChangeNotifier {
   Future<void> loadTodos() async {
     _todos = await StorageService.getAllTodos();
     notifyListeners();
+    await _refreshPendingReminder();
   }
 
   // Add todo
@@ -77,6 +78,7 @@ class TodoProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    await _refreshPendingReminder();
   }
 
   // Update todo
@@ -96,6 +98,7 @@ class TodoProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    await _refreshPendingReminder();
   }
 
   // Delete todo
@@ -104,6 +107,7 @@ class TodoProvider extends ChangeNotifier {
     await NotificationService.cancelNotification(id);
     _todos.removeWhere((t) => t.id == id);
     notifyListeners();
+    await _refreshPendingReminder();
   }
 
   // Toggle completion
@@ -122,7 +126,17 @@ class TodoProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+      await _refreshPendingReminder();
     }
+  }
+
+  /// Keeps a single "you have pending tasks" reminder scheduled ~5 hours
+  /// out whenever there is unfinished work. Replaces the previous one each
+  /// time, so reminders never pile up.
+  Future<void> _refreshPendingReminder() {
+    return NotificationService.schedulePendingTaskReminder(
+      pendingCount: pendingCount,
+    );
   }
 
   // Set filter

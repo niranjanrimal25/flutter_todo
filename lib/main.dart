@@ -18,8 +18,12 @@ void main() async {
     DeviceOrientation.portraitUp,
   ]);
 
-  // Initialize notifications with proper permissions
-  await NotificationService.initialize();
+  // Initialize notifications in the background so the first frame is not
+  // blocked on permission requests — the branded splash screen shows while
+  // this finishes.
+  NotificationService.initialize().catchError((_) {
+    debugPrint('Notification initialization failed (continuing anyway)');
+  });
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

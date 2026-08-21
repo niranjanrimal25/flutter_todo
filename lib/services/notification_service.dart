@@ -14,6 +14,7 @@ class NotificationService {
   // Notification ID namespaces so todos, alarms and the timer never collide.
   static const int _alarmIdBase = 100000;
   static const int _timerNotificationId = 200000;
+  static const int _pendingReminderId = 300000;
 
   static Future<void> initialize() async {
     tz.initializeTimeZones();
@@ -203,6 +204,55 @@ class NotificationService {
 
   static Future<void> cancelTimerEnd() async {
     await cancelNotification(_timerNotificationId);
+  }
+
+  // ===== Pending-task nudge (every ~5 hours) =====
+
+  /// Schedules a one-shot reminder 5 hours from now if there are pending
+  /// tasks. Called on app start and after every change to the task list, so
+  /// the user is nudged roughly every 5 hours while there is unfinished work.
+  /// Only one such notification is ever pending (the previous one is
+  /// replaced).
+  static Future<void> schedulePendingTaskReminder({
+    required int pendingCount,
+  }) async {
+    await cancelNotification(_pendingReminderId);
+    if (pendingCount <= 0) return;
+
+    final scheduledDate =
+        tz.TZDateTime.now(tz.local).add(const Duration(hours: 5));
+
+    const androidDetails = AndroidNotificationDetails(
+      'pending_tasks',
+      'Pending Tasks',
+      channelDescription: 'Reminders about unfinished tasks',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      icon: '@mipmap/ic_launcher',
+      playSound: true,
+      enableVibration: true,
+      fullScreenIntent: false,
+      category: AndroidNotificationCategory.reminder,
+      visibility: NotificationVisibility.public,
+    );
+    const details = NotificationDetails(android: androidDetails);
+
+    try {
+      await _notifications.zonedSchedule(
+        id: _pendingReminderId,
+        title: pendingCount == 1
+            ? '📝 You have 1 pending task'
+            : '📝 You have $pendingCount pending tasks',
+        body: 'Don\'t forget — open Niranjan Todo and finish them!',
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'pending_reminder',
+      );
+      debugPrint('✅ Pending-task reminder scheduled for $scheduledDate');
+    } catch (e) {
+      debugPrint('❌ Error scheduling pending-task reminder: $e');
+    }
   }
 
   static NotificationDetails _alarmNotificationDetails(String label) {

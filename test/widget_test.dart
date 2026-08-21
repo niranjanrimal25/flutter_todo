@@ -179,6 +179,7 @@ void main() {
           home: Scaffold(
             body: NepaliCalendarWidget(
               initialDate: NepaliDateTime(2081, 1, 15),
+              initiallyExpanded: true,
             ),
           ),
         ),
@@ -211,6 +212,7 @@ void main() {
           home: Scaffold(
             body: NepaliCalendarWidget(
               initialDate: NepaliDateTime(2081, 1, 15),
+              initiallyExpanded: true,
             ),
           ),
         ),
@@ -223,6 +225,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('collapsed by default and expands on tap', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NepaliCalendarWidget(
+              initialDate: NepaliDateTime(2081, 1, 15),
+            ),
+          ),
+        ),
+      );
+
+      // Collapsed: no day grid cells.
+      expect(
+        find.byKey(const ValueKey('current-15')),
+        findsNothing,
+      );
+
+      // Tapping the expand chevron reveals the grid.
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_down_rounded).first);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('current-15')), findsOneWidget);
+    });
+
     testWidgets('reports the selected date via onDateSelected',
         (tester) async {
       NepaliDateTime? selected;
@@ -231,6 +256,7 @@ void main() {
           home: Scaffold(
             body: NepaliCalendarWidget(
               initialDate: NepaliDateTime(2081, 1, 15),
+              initiallyExpanded: true,
               onDateSelected: (date) => selected = date,
             ),
           ),

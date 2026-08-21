@@ -34,7 +34,9 @@ class TodoCard extends StatelessWidget {
               foregroundColor: Colors.white,
               icon: Icons.edit_rounded,
               label: 'Edit',
-              borderRadius: BorderRadius.circular(12),
+              width: 72,
+              padding: EdgeInsets.zero,
+              borderRadius: BorderRadius.circular(10),
             ),
             SlidableAction(
               onPressed: (_) => onDelete(),
@@ -42,7 +44,9 @@ class TodoCard extends StatelessWidget {
               foregroundColor: Colors.white,
               icon: Icons.delete_rounded,
               label: 'Delete',
-              borderRadius: BorderRadius.circular(12),
+              width: 72,
+              padding: EdgeInsets.zero,
+              borderRadius: BorderRadius.circular(10),
             ),
           ],
         ),
@@ -112,9 +116,11 @@ class TodoCard extends StatelessWidget {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
                           children: [
-                            if (todo.dueDate != null) ...[
+                            if (todo.dueDate != null)
                               _buildChip(
                                 icon: Icons.calendar_today_rounded,
                                 label: NepaliDatePickerHelper.formatNepaliDate(
@@ -123,17 +129,18 @@ class TodoCard extends StatelessWidget {
                                     ? AppColors.danger
                                     : AppColors.textGrey,
                               ),
-                              const SizedBox(width: 8),
-                            ],
-                            if (todo.reminderTime != null) ...[
+                            if (todo.reminderTime != null)
                               _buildChip(
                                 icon: Icons.notifications_active_rounded,
                                 label: DateFormat('hh:mm a')
                                     .format(todo.reminderTime!),
                                 color: AppColors.primary,
                               ),
-                              const SizedBox(width: 8),
-                            ],
+                            _buildChip(
+                              icon: todo.priority.icon,
+                              label: todo.priority.label,
+                              color: todo.priority.color,
+                            ),
                             _buildChip(
                               icon: Icons.folder_rounded,
                               label: todo.category,

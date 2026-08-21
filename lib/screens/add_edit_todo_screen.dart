@@ -7,6 +7,8 @@ import '../providers/todo_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/nepali_date_picker_dialog.dart';
 
+enum _DatePickerKind { bs, ad }
+
 class AddEditTodoScreen extends StatefulWidget {
   final Todo? todo;
 
@@ -785,6 +787,77 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   }
 
   Future<void> _pickDate() async {
+    // Let the user choose the calendar system for the due date.
+    final selection = await showModalBottomSheet<_DatePickerKind>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCard : Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textLight,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Select calendar system',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: isDark
+                      ? AppColors.darkTextPrimary
+                      : AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.calendar_month_rounded,
+                    color: AppColors.primary),
+                title: const Text('Nepali (Bikram Sambat)'),
+                subtitle: const Text('मिति नेपाली पात्रोबाट छान्नुहोस्'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.pop(ctx, _DatePickerKind.bs),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today_rounded,
+                    color: AppColors.primary),
+                title: const Text('English (AD / Gregorian)'),
+                subtitle: const Text('Pick a date from the English calendar'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.pop(ctx, _DatePickerKind.ad),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (selection == null || !mounted) return;
+
+    if (selection == _DatePickerKind.bs) {
+      await _pickNepaliDate();
+    } else {
+      await _pickEnglishDate();
+    }
+  }
+
+  Future<void> _pickNepaliDate() async {
     final picked = await NepaliDatePickerHelper.showNepaliDatePicker(
       context,
       initialDate: _nepaliDueDate ?? NepaliDateTime.now(),
@@ -800,6 +873,37 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
           _dueTime?.hour ?? 23,
           _dueTime?.minute ?? 59,
         );
+      });
+    }
+  }
+
+  Future<void> _pickEnglishDate() async {
+    final now = DateTime.now();
+    final initial = _dueDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: AppColors.primary),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _dueDate = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _dueTime?.hour ?? 23,
+          _dueTime?.minute ?? 59,
+        );
+        _nepaliDueDate = _dueDate!.toNepaliDateTime();
       });
     }
   }

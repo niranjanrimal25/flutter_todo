@@ -23,9 +23,7 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    Future.microtask(() {
-      if (mounted) context.read<AlarmProvider>().loadAlarms();
-    });
+    // Alarms are loaded once by MainShell before this screen is shown.
   }
 
   @override

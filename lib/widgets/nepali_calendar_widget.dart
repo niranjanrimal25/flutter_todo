@@ -5,8 +5,14 @@ import '../utils/constants.dart';
 class NepaliCalendarWidget extends StatefulWidget {
   final Function(NepaliDateTime)? onDateSelected;
   final NepaliDateTime? initialDate;
+  final bool initiallyExpanded;
 
-  const NepaliCalendarWidget({super.key, this.onDateSelected, this.initialDate});
+  const NepaliCalendarWidget({
+    super.key,
+    this.onDateSelected,
+    this.initialDate,
+    this.initiallyExpanded = false,
+  });
 
   @override
   State<NepaliCalendarWidget> createState() => _NepaliCalendarWidgetState();
@@ -16,6 +22,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
   late NepaliDateTime _currentMonth;
   late NepaliDateTime _selectedDate;
   late NepaliDateTime _today;
+  late bool _expanded;
 
   final List<String> _nepaliMonths = [
     'बैशाख', 'जेठ', 'असार', 'श्रावण',
@@ -37,6 +44,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
     _today = widget.initialDate ?? NepaliDateTime.now();
     _currentMonth = NepaliDateTime(_today.year, _today.month);
     _selectedDate = _today;
+    _expanded = widget.initiallyExpanded;
   }
 
   String _toNepaliDigits(int number) {
@@ -50,10 +58,10 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withValues(alpha: 0.08),
@@ -63,84 +71,157 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           _buildHeader(),
-          _buildDayLabels(),
-          _buildCalendarGrid(),
-          const SizedBox(height: 8),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeIn,
+            switchOutCurve: Curves.easeOut,
+            child: _expanded
+                ? Column(
+                    key: const ValueKey('calendar-grid'),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildDayLabels(),
+                      _buildCalendarGrid(),
+                      const SizedBox(height: 6),
+                    ],
+                  )
+                : _buildCollapsedStrip(isDark, key: const ValueKey('calendar-strip')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollapsedStrip(bool isDark, {Key? key}) {
+    return Padding(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            Icons.calendar_month_rounded,
+            size: 18,
+            color: AppColors.primary.withValues(alpha: 0.8),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'आज: ${_nepaliMonths[_today.month - 1]} '
+            '${_toNepaliDigits(_today.day)}, '
+            '${_toNepaliDigits(_today.year)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.darkTextPrimary : AppColors.textDark,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            'विस्तार गर्नुहोस्',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.primary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.keyboard_arrow_down_rounded,
+              color: AppColors.primary, size: 20),
         ],
       ),
     );
   }
 
   Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, Color(0xFF8B83FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            onPressed: () {
-              setState(() {
-                if (_currentMonth.month == 1) {
-                  _currentMonth = NepaliDateTime(
-                      _currentMonth.year - 1, 12);
-                } else {
-                  _currentMonth = NepaliDateTime(
-                      _currentMonth.year, _currentMonth.month - 1);
-                }
-              });
-            },
-            icon: const Icon(Icons.chevron_left_rounded,
-                color: Colors.white, size: 28),
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.primary, Color(0xFF8B83FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          Column(
-            children: [
-              Text(
-                '${_nepaliMonths[_currentMonth.month - 1]} ${_toNepaliDigits(_currentMonth.year)}',
-                style: const TextStyle(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                setState(() {
+                  if (_currentMonth.month == 1) {
+                    _currentMonth = NepaliDateTime(
+                        _currentMonth.year - 1, 12);
+                  } else {
+                    _currentMonth = NepaliDateTime(
+                        _currentMonth.year, _currentMonth.month - 1);
+                  }
+                });
+              },
+              icon: const Icon(Icons.chevron_left_rounded,
+                  color: Colors.white, size: 22),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    '${_nepaliMonths[_currentMonth.month - 1]} ${_toNepaliDigits(_currentMonth.year)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _getEnglishMonthRange(),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                setState(() {
+                  if (_currentMonth.month == 12) {
+                    _currentMonth = NepaliDateTime(
+                        _currentMonth.year + 1, 1);
+                  } else {
+                    _currentMonth = NepaliDateTime(
+                        _currentMonth.year, _currentMonth.month + 1);
+                  }
+                });
+              },
+              icon: const Icon(Icons.chevron_right_rounded,
+                  color: Colors.white, size: 22),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  _expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
                   color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  size: 24,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                _getEnglishMonthRange(),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-          IconButton(
-            onPressed: () {
-              setState(() {
-                if (_currentMonth.month == 12) {
-                  _currentMonth = NepaliDateTime(
-                      _currentMonth.year + 1, 1);
-                } else {
-                  _currentMonth = NepaliDateTime(
-                      _currentMonth.year, _currentMonth.month + 1);
-                }
-              });
-            },
-            icon: const Icon(Icons.chevron_right_rounded,
-                color: Colors.white, size: 28),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -148,13 +229,13 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
   Widget _buildDayLabels() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+      padding: const EdgeInsets.fromLTRB(6, 8, 6, 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: _nepaliDays.map((day) {
           final isSaturday = day == 'शनि';
           return SizedBox(
-            width: 40,
+            width: 34,
             child: Text(
               day,
               textAlign: TextAlign.center,
@@ -244,7 +325,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Wrap(
         alignment: WrapAlignment.spaceAround,
         children: dayWidgets,
@@ -266,9 +347,9 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
       key: cellKey,
       onTap: onTap,
       child: Container(
-        width: 40,
-        height: 40,
-        margin: const EdgeInsets.symmetric(vertical: 2),
+        width: 34,
+        height: 34,
+        margin: const EdgeInsets.symmetric(vertical: 1),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.primary

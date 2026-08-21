@@ -37,10 +37,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       curve: Curves.elasticOut,
     );
     _fabController.forward();
-
-    Future.microtask(() {
-      if (mounted) context.read<TodoProvider>().loadTodos();
-    });
+    // Todos are loaded once by MainShell before this screen is shown.
   }
 
   String _getGreeting() {
@@ -257,15 +254,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildFilterChips(bool isDark) {
     return Consumer<TodoProvider>(
       builder: (context, provider, _) {
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
+        // A Wrap (instead of a horizontal scroll view) keeps every filter
+        // label fully visible — "Today", "Completed", "Pending" etc. are
+        // never truncated and wrap to a second line when needed.
+        return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Row(
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 8,
             children: TodoFilter.values.map((filter) {
               final isSelected = provider.currentFilter == filter;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: AnimatedScale(
+              return AnimatedScale(
                   scale: isSelected ? 1.05 : 1.0,
                   duration: const Duration(milliseconds: 200),
                   child: FilterChip(
@@ -305,8 +304,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     onSelected: (_) => provider.setFilter(filter),
                   ),
-                ),
-              );
+                );
             }).toList(),
           ),
         );
