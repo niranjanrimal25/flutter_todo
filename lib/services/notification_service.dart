@@ -359,12 +359,20 @@ class NotificationService {
   /// phone actually RINGS and wakes the screen for both alarms and timers.
   static NotificationDetails _alarmNotificationDetails(String label) {
     final androidDetails = AndroidNotificationDetails(
-      'alarms',
+      // NOTE: channel id intentionally differs from the old 'alarms' channel.
+      // Android caches a channel's sound once it is created, so the custom
+      // alarm tone needs a fresh channel to take effect for existing installs.
+      'alarms_ring',
       'Alarms & Timer',
       channelDescription: 'Alarm and timer notifications',
       importance: Importance.max,
       priority: Priority.max,
       icon: '@mipmap/ic_launcher',
+      // Play the bundled alarm tone from the notification itself, so it
+      // rings even when the app is fully closed and the full-screen intent
+      // cannot launch (or is not granted). The RingScreen then loops the
+      // same tone when it opens.
+      sound: const RawResourceAndroidNotificationSound('alarm'),
       playSound: true,
       enableVibration: true,
       fullScreenIntent: true,

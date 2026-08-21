@@ -127,14 +127,20 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
                       final picked = await showTimePicker(
                         context: context,
                         initialTime: selectedTime,
-                        builder: (context, child) => Theme(
-                          data: Theme.of(context).copyWith(
-                            colorScheme: const ColorScheme.light(
-                              primary: AppColors.primary,
+                        builder: (context, child) {
+                          final isDark =
+                              Theme.of(context).brightness == Brightness.dark;
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: isDark
+                                  ? const ColorScheme.dark(
+                                      primary: AppColors.primary)
+                                  : const ColorScheme.light(
+                                      primary: AppColors.primary),
                             ),
-                          ),
-                          child: child!,
-                        ),
+                            child: child!,
+                          );
+                        },
                       );
                       if (picked != null) {
                         setDialogState(() => selectedTime = picked);

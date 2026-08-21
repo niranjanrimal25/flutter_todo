@@ -70,6 +70,19 @@ class AppTheme {
         brightness: Brightness.dark,
       ),
       scaffoldBackgroundColor: AppColors.darkBackground,
+      // Surface used by dialogs, bottom sheets, menus etc. so system UI is
+      // dark too instead of flashing white in dark mode.
+      canvasColor: AppColors.darkCard,
+      dividerTheme:
+          DividerThemeData(color: Colors.white.withValues(alpha: 0.08)),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.darkCard,
+        surfaceTintColor: Colors.transparent,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.darkCard,
+        surfaceTintColor: Colors.transparent,
+      ),
       textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -93,8 +106,12 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.darkCard,
         elevation: 2,
-        shadowColor: Colors.black26,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shadowColor: Colors.black38,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          // Subtle outline so cards are distinguishable on the dark bg.
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

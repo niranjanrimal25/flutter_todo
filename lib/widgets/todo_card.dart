@@ -22,29 +22,55 @@ class TodoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget compactAction({
+      required IconData icon,
+      required String label,
+      required Color color,
+      required VoidCallback onPressed,
+    }) {
+      return CustomSlidableAction(
+        onPressed: (_) => onPressed(),
+        backgroundColor: color,
+        borderRadius: BorderRadius.circular(10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: Colors.white),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Slidable(
         endActionPane: ActionPane(
           motion: const DrawerMotion(),
           children: [
-            SlidableAction(
-              onPressed: (_) => onEdit(),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+            compactAction(
               icon: Icons.edit_rounded,
               label: 'Edit',
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              borderRadius: BorderRadius.circular(10),
+              color: AppColors.primary,
+              onPressed: onEdit,
             ),
-            SlidableAction(
-              onPressed: (_) => onDelete(),
-              backgroundColor: AppColors.danger,
-              foregroundColor: Colors.white,
+            compactAction(
               icon: Icons.delete_rounded,
               label: 'Delete',
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              borderRadius: BorderRadius.circular(10),
+              color: AppColors.danger,
+              onPressed: onDelete,
             ),
           ],
         ),
@@ -69,7 +95,9 @@ class TodoCard extends StatelessWidget {
                         border: Border.all(
                           color: todo.isCompleted
                               ? AppColors.primary
-                              : AppColors.textLight,
+                              : isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textLight,
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(8),
@@ -94,8 +122,12 @@ class TodoCard extends StatelessWidget {
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: todo.isCompleted
-                                ? AppColors.textLight
-                                : AppColors.textDark,
+                                ? (isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textLight)
+                                : (isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.textDark),
                             decoration: todo.isCompleted
                                 ? TextDecoration.lineThrough
                                 : null,
@@ -109,7 +141,10 @@ class TodoCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.textGrey.withValues(alpha: 0.7),
+                              color: (isDark
+                                      ? AppColors.darkTextSecondary
+                                      : AppColors.textGrey)
+                                  .withValues(alpha: 0.9),
                             ),
                           ),
                         ],
@@ -125,7 +160,9 @@ class TodoCard extends StatelessWidget {
                                     todo.dueDate!.toNepaliDateTime()),
                                 color: _isOverdue()
                                     ? AppColors.danger
-                                    : AppColors.textGrey,
+                                    : isDark
+                                        ? AppColors.darkTextSecondary
+                                        : AppColors.textGrey,
                               ),
                             if (todo.reminderTime != null)
                               _buildChip(
@@ -142,7 +179,9 @@ class TodoCard extends StatelessWidget {
                             _buildChip(
                               icon: Icons.folder_rounded,
                               label: todo.category,
-                              color: AppColors.textGrey,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textGrey,
                             ),
                           ],
                         ),

@@ -12,7 +12,8 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🇳🇵 Nepali dates shown in Devanagari digits and month names
 - 🏷️ Priorities (Low / Medium / High), categories, and search
 - 🔎 Filter tasks: All / Today / Completed / Pending
-- 🌙 Light & dark themes
+- 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
+- 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
 
 ## Getting Started
