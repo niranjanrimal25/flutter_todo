@@ -331,15 +331,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               hintText: 'Search tasks...',
               prefixIcon:
                   const Icon(Icons.search_rounded, color: AppColors.textGrey),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded),
-                      onPressed: () {
-                        _searchController.clear();
-                        context.read<TodoProvider>().search('');
-                      },
-                    )
-                  : null,
+              suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _searchController,
+                builder: (context, value, _) {
+                  return value.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded),
+                          onPressed: () {
+                            _searchController.clear();
+                            context.read<TodoProvider>().search('');
+                          },
+                        )
+                      : null;
+                },
+              ),
             ),
           ),
         ),

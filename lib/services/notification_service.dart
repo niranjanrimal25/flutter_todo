@@ -16,7 +16,16 @@ class NotificationService {
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+      macOS: darwinSettings,
+    );
 
     await _notifications.initialize(
       settings: initSettings,
@@ -41,6 +50,16 @@ class NotificationService {
     if (androidPlugin != null) {
       await androidPlugin.requestNotificationsPermission();
       await androidPlugin.requestExactAlarmsPermission();
+    }
+
+    final iosPlugin = _notifications.resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin>();
+    if (iosPlugin != null) {
+      await iosPlugin.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
     }
   }
 
@@ -77,7 +96,9 @@ class NotificationService {
       icon: '@mipmap/ic_launcher',
       playSound: true,
       enableVibration: true,
-      fullScreenIntent: true,
+      // A todo reminder shouldn't hijack the whole screen; full-screen
+      // intents are also restricted by Play Store policy.
+      fullScreenIntent: false,
       category: AndroidNotificationCategory.reminder,
       visibility: NotificationVisibility.public,
       styleInformation: BigTextStyleInformation(

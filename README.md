@@ -1,17 +1,42 @@
 # todo_app
 
-A new Flutter project.
+A beautiful Todo app with reminders, built with Flutter.
+
+## Features
+
+- ✅ Create, edit, delete, and complete tasks
+- 🔔 Local notifications for task reminders (with exact-alarm scheduling on Android)
+- 📅 **Nepali (Bikram Sambat) calendar** — pick due dates with the Nepali date picker
+- 🇳🇵 Nepali dates shown in Devanagari digits and month names
+- 🏷️ Priorities (Low / Medium / High), categories, and search
+- 🔎 Filter tasks: All / Today / Completed / Pending
+- 🌙 Light & dark themes
+- 💾 Local persistence with SQLite (`sqflite`)
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+Run the tests:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+flutter test
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Project structure
+
+- `lib/models/todo.dart` — Todo model with SQLite (de)serialization
+- `lib/providers/` — `TodoProvider` (state) and `ThemeProvider`
+- `lib/screens/` — `home_screen.dart`, `add_edit_todo_screen.dart`
+- `lib/services/` — `storage_service.dart` (sqflite), `notification_service.dart`
+- `lib/widgets/` — todo cards, Nepali calendar widget, Nepali date picker dialog, empty state
+- `lib/utils/` — theme and shared constants
+
+## Notes
+
+- Notifications are scheduled for the `Asia/Kathmandu` timezone.
+- Android: exact alarms require the user to grant "Alarms & reminders" access
+  (requested at startup).

@@ -4,8 +4,9 @@ import '../utils/constants.dart';
 
 class NepaliCalendarWidget extends StatefulWidget {
   final Function(NepaliDateTime)? onDateSelected;
+  final NepaliDateTime? initialDate;
 
-  const NepaliCalendarWidget({super.key, this.onDateSelected});
+  const NepaliCalendarWidget({super.key, this.onDateSelected, this.initialDate});
 
   @override
   State<NepaliCalendarWidget> createState() => _NepaliCalendarWidgetState();
@@ -33,7 +34,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
   @override
   void initState() {
     super.initState();
-    _today = NepaliDateTime.now();
+    _today = widget.initialDate ?? NepaliDateTime.now();
     _currentMonth = NepaliDateTime(_today.year, _today.month);
     _selectedDate = _today;
   }
@@ -170,7 +171,10 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
   Widget _buildCalendarGrid() {
     final firstDayOfMonth = NepaliDateTime(
         _currentMonth.year, _currentMonth.month, 1);
-    final startWeekday = firstDayOfMonth.weekday % 7;
+    // NepaliDateTime.weekday is 1=Sunday .. 7=Saturday, matching the
+    // _nepaliDays label order (index 0 = Sunday). Convert to a 0-based
+    // column index so Sunday lands in the first column.
+    final startWeekday = firstDayOfMonth.weekday - 1;
 
     final daysInMonth = _currentMonth.totalDays;
 
@@ -192,6 +196,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
         isToday: false,
         isSelected: false,
         isSaturday: (i % 7) == 6,
+        cellKey: ValueKey('prev-$day'),
       ));
     }
 
@@ -204,8 +209,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
       final isSelected = date.year == _selectedDate.year &&
           date.month == _selectedDate.month &&
           date.day == _selectedDate.day;
-      final weekday = date.weekday % 7;
-      final isSaturday = weekday == 6;
+      final isSaturday = date.weekday == 7;
 
       dayWidgets.add(_buildDayCell(
         day: day,
@@ -217,6 +221,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
           setState(() => _selectedDate = date);
           widget.onDateSelected?.call(date);
         },
+        cellKey: ValueKey('current-$day'),
       ));
     }
 
@@ -228,6 +233,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
         isToday: false,
         isSelected: false,
         isSaturday: ((startWeekday + daysInMonth + i - 1) % 7) == 6,
+        cellKey: ValueKey('next-$i'),
       ));
     }
 
@@ -247,8 +253,10 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
     required bool isSelected,
     required bool isSaturday,
     VoidCallback? onTap,
+    Key? cellKey,
   }) {
     return GestureDetector(
+      key: cellKey,
       onTap: onTap,
       child: Container(
         width: 40,

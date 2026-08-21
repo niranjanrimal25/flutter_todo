@@ -68,14 +68,4 @@ class StorageService {
       whereArgs: [id],
     );
   }
-
-  static Future<int> toggleTodo(int id, bool isCompleted) async {
-    final db = await database;
-    return await db.update(
-      'todos',
-      {'isCompleted': isCompleted ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
 }

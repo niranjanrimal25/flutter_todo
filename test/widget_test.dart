@@ -1,33 +1,200 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nepali_utils/nepali_utils.dart';
 
-import 'package:todo_app/main.dart';
+import 'package:todo_app/models/todo.dart';
+import 'package:todo_app/utils/constants.dart';
+import 'package:todo_app/widgets/empty_state.dart';
+import 'package:todo_app/widgets/nepali_calendar_widget.dart';
+import 'package:todo_app/widgets/nepali_date_picker_dialog.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('Todo model', () {
+    test('toMap/fromMap round-trip preserves all fields', () {
+      final todo = Todo(
+        id: 7,
+        title: 'Buy groceries',
+        description: 'Milk, eggs, bread',
+        isCompleted: true,
+        priority: Priority.high,
+        createdAt: DateTime(2026, 8, 21, 10, 30),
+        dueDate: DateTime(2026, 8, 25, 18, 0),
+        reminderTime: DateTime(2026, 8, 25, 9, 0),
+        category: 'Shopping',
+      );
 
-    // Verify the calendar widget is present.
-    expect(find.text('Jestha'), findsOneWidget);
+      final restored = Todo.fromMap(todo.toMap());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(restored.id, 7);
+      expect(restored.title, 'Buy groceries');
+      expect(restored.description, 'Milk, eggs, bread');
+      expect(restored.isCompleted, isTrue);
+      expect(restored.priority, Priority.high);
+      expect(restored.createdAt, todo.createdAt);
+      expect(restored.dueDate, todo.dueDate);
+      expect(restored.reminderTime, todo.reminderTime);
+      expect(restored.category, 'Shopping');
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('fromMap handles missing optional fields', () {
+      final todo = Todo(title: 'No dates');
+      final restored = Todo.fromMap(todo.toMap());
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      expect(restored.dueDate, isNull);
+      expect(restored.reminderTime, isNull);
+      expect(restored.isCompleted, isFalse);
+      expect(restored.priority, Priority.medium);
+      expect(restored.category, 'General');
+    });
+
+    test('copyWith overrides only the provided fields', () {
+      final todo = Todo(
+        id: 1,
+        title: 'A',
+        description: 'B',
+        priority: Priority.low,
+        category: 'Work',
+      );
+      final updated = todo.copyWith(
+        title: 'Updated',
+        priority: Priority.high,
+        category: 'Personal',
+      );
+
+      expect(updated.id, 1);
+      expect(updated.title, 'Updated');
+      expect(updated.description, 'B');
+      expect(updated.priority, Priority.high);
+      expect(updated.category, 'Personal');
+      expect(updated.isCompleted, isFalse);
+    });
+
+    test('priority labels map correctly', () {
+      expect(Priority.low.label, 'Low');
+      expect(Priority.medium.label, 'Medium');
+      expect(Priority.high.label, 'High');
+    });
+  });
+
+  group('NepaliDatePickerHelper', () {
+    test('formatNepaliDate uses Nepali digits and month names', () {
+      final formatted =
+          NepaliDatePickerHelper.formatNepaliDate(NepaliDateTime(2083, 5, 5));
+      expect(formatted, '२०८३ भदौ ५');
+    });
+  });
+
+  group('EmptyState', () {
+    testWidgets('shows the default message and icon', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: EmptyState())),
+      );
+
+      expect(
+        find.text('No tasks yet!\nTap + to add your first task'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.checklist_rounded), findsOneWidget);
+    });
+
+    testWidgets('shows a custom message and icon', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: EmptyState(
+              message: 'Nothing here',
+              icon: Icons.inbox_rounded,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Nothing here'), findsOneWidget);
+      expect(find.byIcon(Icons.inbox_rounded), findsOneWidget);
+    });
+  });
+
+  group('NepaliCalendarWidget', () {
+    // NepaliDateTime.weekday is 1=Sunday .. 7=Saturday, so the first day
+    // of a month must be preceded by (weekday - 1) leading cells from the
+    // previous month. Regression test for an off-by-one bug that used
+    // `weekday % 7` and misaligned the whole grid by one column.
+    testWidgets('aligns the first day of the month under the correct weekday',
+        (tester) async {
+      final firstOfMonth = NepaliDateTime(2081, 1, 1);
+      final expectedLeading = firstOfMonth.weekday - 1;
+      expect(expectedLeading, inInclusiveRange(0, 6));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NepaliCalendarWidget(
+              initialDate: NepaliDateTime(2081, 1, 15),
+            ),
+          ),
+        ),
+      );
+
+      final prevCells = tester.widgetList<Widget>(
+        find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              (w.key as ValueKey<String>).value.startsWith('prev-'),
+        ),
+      );
+      expect(prevCells.length, expectedLeading);
+
+      // The grid is always exactly 6 weeks (42 cells).
+      final dayCells = tester.widgetList<Widget>(
+        find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              RegExp(r'^(prev|current|next)-')
+                  .hasMatch((w.key as ValueKey<String>).value),
+        ),
+      );
+      expect(dayCells.length, 42);
+    });
+
+    testWidgets('navigates months without crashing', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NepaliCalendarWidget(
+              initialDate: NepaliDateTime(2081, 1, 15),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.chevron_right_rounded));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.chevron_left_rounded));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reports the selected date via onDateSelected',
+        (tester) async {
+      NepaliDateTime? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NepaliCalendarWidget(
+              initialDate: NepaliDateTime(2081, 1, 15),
+              onDateSelected: (date) => selected = date,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('current-15')));
+      await tester.pump();
+
+      expect(selected, isNotNull);
+      expect(selected!.year, 2081);
+      expect(selected!.month, 1);
+      expect(selected!.day, 15);
+    });
   });
 }

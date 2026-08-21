@@ -28,7 +28,10 @@ class AppTheme {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 8,
-        shape: CircleBorder(),
+        // The app only uses FloatingActionButton.extended, so a stadium
+        // (pill) shape keeps the label fully visible. CircleBorder would
+        // clip "Add Task" to a small circle.
+        shape: StadiumBorder(),
       ),
       cardTheme: CardThemeData(
         color: AppColors.cardWhite,
@@ -82,7 +85,10 @@ class AppTheme {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 8,
-        shape: CircleBorder(),
+        // The app only uses FloatingActionButton.extended, so a stadium
+        // (pill) shape keeps the label fully visible. CircleBorder would
+        // clip "Add Task" to a small circle.
+        shape: StadiumBorder(),
       ),
       cardTheme: CardThemeData(
         color: AppColors.darkCard,

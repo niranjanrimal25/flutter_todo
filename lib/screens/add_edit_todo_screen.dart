@@ -805,11 +805,20 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   }
 
   Future<void> _pickReminderDateTime() async {
+    // When editing a task whose reminder has already passed, fall back to
+    // "now" so initialDate is never before firstDate (showDatePicker
+    // asserts initialDate >= firstDate).
+    final now = DateTime.now();
+    final validInitialDate =
+        _reminderTime != null && _reminderTime!.isAfter(now)
+            ? _reminderTime!
+            : now;
+
     final date = await showDatePicker(
       context: context,
-      initialDate: _reminderTime ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+      initialDate: validInitialDate,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 5)),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -1076,7 +1085,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     }
   }
 
-  void _saveTodo() {
+  Future<void> _saveTodo() async {
     if (!_formKey.currentState!.validate()) return;
 
     final todo = Todo(
@@ -1092,16 +1101,30 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     );
 
     final provider = context.read<TodoProvider>();
+    // Capture the messenger before awaiting so we don't use the screen's
+    // context after it has been popped/disposed.
+    final messenger = ScaffoldMessenger.of(context);
 
-    if (_isEditing) {
-      provider.updateTodo(todo);
-    } else {
-      provider.addTodo(todo);
+    try {
+      if (_isEditing) {
+        await provider.updateTodo(todo);
+      } else {
+        await provider.addTodo(todo);
+      }
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not save task. Please try again.'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
     }
 
+    if (!mounted) return;
     Navigator.pop(context);
-
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: Text(_isEditing ? 'Task updated! ✅' : 'Task created! 🎉'),
         backgroundColor: AppColors.success,
