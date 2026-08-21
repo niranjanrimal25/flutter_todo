@@ -1,11 +1,13 @@
-# todo_app
+# Niranjan Todo
 
-A beautiful Todo app with reminders, built with Flutter.
+A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 
 ## Features
 
 - ✅ Create, edit, delete, and complete tasks
 - 🔔 Local notifications for task reminders (with exact-alarm scheduling on Android)
+- ⏰ **Alarm section** — set daily repeating alarms with labels; they ring even when the app is closed
+- ⏱️ **Timer section** — countdown timer with presets (1–30 min); a notification rings when it finishes
 - 📅 **Nepali (Bikram Sambat) calendar** — pick due dates with the Nepali date picker
 - 🇳🇵 Nepali dates shown in Devanagari digits and month names
 - 🏷️ Priorities (Low / Medium / High), categories, and search
@@ -28,9 +30,9 @@ flutter test
 
 ## Project structure
 
-- `lib/models/todo.dart` — Todo model with SQLite (de)serialization
-- `lib/providers/` — `TodoProvider` (state) and `ThemeProvider`
-- `lib/screens/` — `home_screen.dart`, `add_edit_todo_screen.dart`
+- `lib/models/` — `todo.dart`, `alarm.dart` with SQLite (de)serialization
+- `lib/providers/` — `TodoProvider`, `AlarmProvider`, `ThemeProvider`
+- `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
 - `lib/services/` — `storage_service.dart` (sqflite), `notification_service.dart`
 - `lib/widgets/` — todo cards, Nepali calendar widget, Nepali date picker dialog, empty state
 - `lib/utils/` — theme and shared constants

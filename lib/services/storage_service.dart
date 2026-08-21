@@ -1,9 +1,12 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/todo.dart';
+import '../models/alarm.dart';
 
 class StorageService {
   static Database? _database;
+
+  static const int _dbVersion = 2;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -17,7 +20,7 @@ class StorageService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: _dbVersion,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE todos(
@@ -32,9 +35,33 @@ class StorageService {
             category TEXT DEFAULT 'General'
           )
         ''');
+        await db.execute('''
+          CREATE TABLE alarms(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hour INTEGER NOT NULL,
+            minute INTEGER NOT NULL,
+            label TEXT DEFAULT 'Alarm',
+            isEnabled INTEGER NOT NULL DEFAULT 1
+          )
+        ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE alarms(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              label TEXT DEFAULT 'Alarm',
+              isEnabled INTEGER NOT NULL DEFAULT 1
+            )
+          ''');
+        }
       },
     );
   }
+
+  // ===== Todos =====
 
   static Future<int> insertTodo(Todo todo) async {
     final db = await database;
@@ -64,6 +91,39 @@ class StorageService {
     final db = await database;
     return await db.delete(
       'todos',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ===== Alarms =====
+
+  static Future<int> insertAlarm(Alarm alarm) async {
+    final db = await database;
+    return await db.insert('alarms', alarm.toMap());
+  }
+
+  static Future<List<Alarm>> getAllAlarms() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps =
+        await db.query('alarms', orderBy: 'hour ASC, minute ASC');
+    return maps.map((map) => Alarm.fromMap(map)).toList();
+  }
+
+  static Future<int> updateAlarm(Alarm alarm) async {
+    final db = await database;
+    return await db.update(
+      'alarms',
+      alarm.toMap(),
+      where: 'id = ?',
+      whereArgs: [alarm.id],
+    );
+  }
+
+  static Future<int> deleteAlarm(int id) async {
+    final db = await database;
+    return await db.delete(
+      'alarms',
       where: 'id = ?',
       whereArgs: [id],
     );

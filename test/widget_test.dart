@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 
+import 'package:todo_app/models/alarm.dart';
 import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/utils/constants.dart';
 import 'package:todo_app/widgets/empty_state.dart';
@@ -73,6 +74,54 @@ void main() {
       expect(Priority.low.label, 'Low');
       expect(Priority.medium.label, 'Medium');
       expect(Priority.high.label, 'High');
+    });
+  });
+
+  group('Alarm model', () {
+    test('toMap/fromMap round-trip preserves all fields', () {
+      final alarm = Alarm(
+        id: 3,
+        hour: 6,
+        minute: 30,
+        label: 'Wake up',
+        isEnabled: true,
+      );
+
+      final restored = Alarm.fromMap(alarm.toMap());
+
+      expect(restored.id, 3);
+      expect(restored.hour, 6);
+      expect(restored.minute, 30);
+      expect(restored.label, 'Wake up');
+      expect(restored.isEnabled, isTrue);
+    });
+
+    test('fromMap uses defaults for missing optional fields', () {
+      final restored = Alarm.fromMap({
+        'id': 1,
+        'hour': 9,
+        'minute': 15,
+        'isEnabled': 0,
+      });
+
+      expect(restored.label, 'Alarm');
+      expect(restored.isEnabled, isFalse);
+    });
+
+    test('copyWith overrides only the provided fields', () {
+      final alarm = Alarm(id: 1, hour: 7, minute: 0, label: 'A');
+      final updated = alarm.copyWith(hour: 8, isEnabled: false);
+
+      expect(updated.id, 1);
+      expect(updated.hour, 8);
+      expect(updated.minute, 0);
+      expect(updated.label, 'A');
+      expect(updated.isEnabled, isFalse);
+    });
+
+    test('minutesOfDay allows sorting by time of day', () {
+      expect(Alarm(hour: 0, minute: 5).minutesOfDay, 5);
+      expect(Alarm(hour: 23, minute: 59).minutesOfDay, 1439);
     });
   });
 

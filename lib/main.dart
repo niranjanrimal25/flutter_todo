@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import 'providers/todo_provider.dart';
 import 'providers/theme_provider.dart';
-import 'screens/home_screen.dart';
+import 'providers/alarm_provider.dart';
+import 'screens/main_shell.dart';
 import 'services/notification_service.dart';
 import 'utils/theme.dart';
 
@@ -38,17 +39,18 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => TodoProvider()),
+        ChangeNotifierProvider(create: (_) => AlarmProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: 'Todo App',
+            title: 'Niranjan Todo',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: const HomeScreen(),
+            home: const MainShell(),
           );
         },
       ),
