@@ -375,6 +375,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   final index = entry.key;
                   final todo = entry.value;
                   return AnimatedSlide(
+                    // Keep each task's element attached to its id when the
+                    // priority/date sort changes and cards move positions.
+                    key: ValueKey(todo.id ?? todo.createdAt.toIso8601String()),
                     offset: Offset.zero,
                     duration: Duration(milliseconds: 300 + (index * 50)),
                     child: AnimatedOpacity(

@@ -92,7 +92,10 @@ class StorageService {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'todos',
-      orderBy: 'isCompleted ASC, priority DESC, dueDate ASC',
+      // Keep persistence in the same order as the UI. TodoProvider also
+      // sorts after filtering, so this is a fast initial order rather than
+      // the only source of truth.
+      orderBy: 'priority DESC, createdAt DESC',
     );
     return maps.map((map) => Todo.fromMap(map)).toList();
   }

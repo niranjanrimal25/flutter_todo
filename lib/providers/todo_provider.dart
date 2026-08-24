@@ -9,8 +9,14 @@ class TodoProvider extends ChangeNotifier {
   TodoFilter _currentFilter = TodoFilter.all;
   String _searchQuery = '';
 
+  /// Todos in the order they should appear in the task list.
+  ///
+  /// This is calculated when the list is read rather than only when a todo is
+  /// added. That keeps the ordering correct after an edit changes either the
+  /// priority or the creation date, as long as the provider notifies its
+  /// listeners (which all provider mutations do).
   List<Todo> get todos => _filteredTodos;
-  List<Todo> get allTodos => _todos;
+  List<Todo> get allTodos => sortTodos(_todos);
   TodoFilter get currentFilter => _currentFilter;
 
   // Stats
@@ -49,7 +55,32 @@ class TodoProvider extends ChangeNotifier {
         break;
     }
 
-    return filtered;
+    // Sorting is deliberately the final step so every view (including
+    // search, Today, Completed, and Pending) uses the same ordering:
+    // High, Medium, Low, then newest creation date within each group.
+    return sortTodos(filtered);
+  }
+
+  /// Returns a new list sorted by priority descending, then creation date
+  /// descending. The source iterable is never mutated.
+  ///
+  /// Keeping this comparator in one place makes it impossible for the loaded
+  /// order, a filtered order, and the displayed order to drift apart.
+  static List<Todo> sortTodos(Iterable<Todo> todos) {
+    final sorted = List<Todo>.of(todos);
+    sorted.sort((a, b) {
+      final priorityOrder =
+          b.priority.sortOrder.compareTo(a.priority.sortOrder);
+      if (priorityOrder != 0) return priorityOrder;
+
+      final createdOrder = b.createdAt.compareTo(a.createdAt);
+      if (createdOrder != 0) return createdOrder;
+
+      // Creation timestamps can be equal when tasks are created in the same
+      // clock tick. Use the id only as a deterministic final tie-breaker.
+      return (b.id ?? -1).compareTo(a.id ?? -1);
+    });
+    return sorted;
   }
 
   bool _isToday(DateTime date) {

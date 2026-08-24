@@ -23,6 +23,19 @@ class AppColors {
 enum Priority { low, medium, high }
 
 extension PriorityExtension on Priority {
+  /// Explicit rank used by task sorting. Keep this independent of enum index
+  /// so the display rule is clear even if the enum declaration is reordered.
+  int get sortOrder {
+    switch (this) {
+      case Priority.low:
+        return 0;
+      case Priority.medium:
+        return 1;
+      case Priority.high:
+        return 2;
+    }
+  }
+
   String get label {
     switch (this) {
       case Priority.low:

@@ -94,6 +94,19 @@ class TodoCard extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
+                  // The leading bar makes priority scannable without opening
+                  // the task. It stays in sync with the task's priority on
+                  // every rebuild of the provider.
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    width: 4,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: todo.priority.color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   GestureDetector(
                     onTap: onToggle,
                     child: AnimatedContainer(
@@ -198,14 +211,6 @@ class TodoCard extends StatelessWidget {
                           ],
                         ),
                       ],
-                    ),
-                  ),
-                  Container(
-                    width: 4,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: todo.priority.color,
-                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ],

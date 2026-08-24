@@ -5,6 +5,7 @@ import 'package:nepali_utils/nepali_utils.dart';
 import 'package:todo_app/models/alarm.dart';
 import 'package:todo_app/models/timer_state.dart';
 import 'package:todo_app/models/todo.dart';
+import 'package:todo_app/providers/todo_provider.dart';
 import 'package:todo_app/utils/constants.dart';
 import 'package:todo_app/widgets/empty_state.dart';
 import 'package:todo_app/widgets/nepali_calendar_widget.dart';
@@ -75,6 +76,56 @@ void main() {
       expect(Priority.low.label, 'Low');
       expect(Priority.medium.label, 'Medium');
       expect(Priority.high.label, 'High');
+    });
+
+    test('sorts by priority, then newest creation date', () {
+      final todos = [
+        Todo(
+          id: 1,
+          title: 'Old high',
+          priority: Priority.high,
+          createdAt: DateTime(2026, 8, 20),
+        ),
+        Todo(
+          id: 2,
+          title: 'Newest low',
+          priority: Priority.low,
+          createdAt: DateTime(2026, 8, 24),
+        ),
+        Todo(
+          id: 3,
+          title: 'Newest high',
+          priority: Priority.high,
+          createdAt: DateTime(2026, 8, 24),
+        ),
+        Todo(
+          id: 4,
+          title: 'Old medium',
+          priority: Priority.medium,
+          createdAt: DateTime(2026, 8, 21),
+        ),
+        Todo(
+          id: 5,
+          title: 'Newest medium',
+          priority: Priority.medium,
+          createdAt: DateTime(2026, 8, 23),
+        ),
+      ];
+
+      final sorted = TodoProvider.sortTodos(todos);
+
+      expect(
+        sorted.map((todo) => todo.title).toList(),
+        [
+          'Newest high',
+          'Old high',
+          'Newest medium',
+          'Old medium',
+          'Newest low',
+        ],
+      );
+      // Sorting must not mutate the provider's source list.
+      expect(todos.first.title, 'Old high');
     });
   });
 
