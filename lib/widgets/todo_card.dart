@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:nepali_utils/nepali_utils.dart';
@@ -135,6 +137,10 @@ class TodoCard extends StatelessWidget {
                           : null,
                     ),
                   ),
+                  if (todo.imagePath != null && todo.imagePath!.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    _buildImageThumbnail(isDark),
+                  ],
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -216,6 +222,30 @@ class TodoCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImageThumbnail(bool isDark) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.file(
+        File(todo.imagePath!),
+        width: 56,
+        height: 56,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: 56,
+            height: 56,
+            color: AppColors.primary.withValues(alpha: 0.1),
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: isDark ? AppColors.primaryLight : AppColors.primary,
+              size: 24,
+            ),
+          );
+        },
       ),
     );
   }

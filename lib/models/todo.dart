@@ -1,6 +1,8 @@
 import '../utils/constants.dart';
 
 class Todo {
+  static const Object _imagePathUnset = Object();
+
   int? id;
   String title;
   String description;
@@ -13,6 +15,8 @@ class Todo {
   /// as the cadence anchor when present).
   DateTime? reminderTime;
   String category;
+  /// Absolute path to the task's locally copied image, when attached.
+  String? imagePath;
 
   Todo({
     this.id,
@@ -24,6 +28,7 @@ class Todo {
     this.dueDate,
     this.reminderTime,
     this.category = 'General',
+    this.imagePath,
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
@@ -37,6 +42,7 @@ class Todo {
       'dueDate': dueDate?.toIso8601String(),
       'reminderTime': reminderTime?.toIso8601String(),
       'category': category,
+      'imagePath': imagePath,
     };
   }
 
@@ -54,6 +60,7 @@ class Todo {
           ? DateTime.parse(map['reminderTime'] as String)
           : null,
       category: (map['category'] as String?) ?? 'General',
+      imagePath: map['imagePath'] as String?,
     );
   }
 
@@ -67,6 +74,7 @@ class Todo {
     DateTime? dueDate,
     DateTime? reminderTime,
     String? category,
+    Object? imagePath = _imagePathUnset,
   }) {
     return Todo(
       id: id ?? this.id,
@@ -78,6 +86,9 @@ class Todo {
       dueDate: dueDate ?? this.dueDate,
       reminderTime: reminderTime ?? this.reminderTime,
       category: category ?? this.category,
+      imagePath: identical(imagePath, _imagePathUnset)
+          ? this.imagePath
+          : imagePath as String?,
     );
   }
 }

@@ -22,13 +22,33 @@ dependencies:
   nepali_utils: ^3.0.8
   nepali_date_picker: ^7.0.1
   alarm: ^5.11.0
+  image_picker: ^1.2.3
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  flutter_native_splash: ^2.4.8
 
 flutter:
   uses-material-design: true
   assets:
     - assets/sounds/
+    - assets/images/
+
+flutter_native_splash:
+  color: "#6C63FF"
+  color_dark: "#1A1A2E"
+  image: assets/images/splash_logo.png
+  android: true
+  ios: true
+  web: false
+  android_gravity: center
+  ios_content_mode: center
+  android_12:
+    color: "#6C63FF"
+    color_dark: "#1A1A2E"
+    image: assets/images/splash_logo.png
+    icon_background_color: "#6C63FF"
+    icon_background_color_dark: "#1A1A2E"

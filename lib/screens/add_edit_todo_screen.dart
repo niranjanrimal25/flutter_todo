@@ -1,9 +1,16 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
 import '../providers/todo_provider.dart';
+import '../services/image_storage_service.dart';
 import '../services/notification_service.dart';
 import '../utils/constants.dart';
 import '../widgets/nepali_date_picker_dialog.dart';
@@ -24,6 +31,11 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _descController;
+  final ImagePicker _imagePicker = ImagePicker();
+  final Set<String> _draftImagePaths = <String>{};
+  String? _imagePath;
+  String? _originalImagePath;
+  bool _didSave = false;
   late Priority _priority;
   late String _category;
   DateTime? _dueDate;
@@ -52,6 +64,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     _titleController = TextEditingController(text: widget.todo?.title ?? '');
     _descController =
         TextEditingController(text: widget.todo?.description ?? '');
+    _imagePath = widget.todo?.imagePath;
+    _originalImagePath = widget.todo?.imagePath;
     _priority = widget.todo?.priority ?? Priority.medium;
     _category = widget.todo?.category ?? 'General';
     _dueDate = widget.todo?.dueDate;
@@ -72,6 +86,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       curve: Curves.easeInOut,
     );
     _animController.forward();
+    _recoverLostImage();
   }
 
   @override
@@ -129,6 +144,13 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                   ),
                 ),
               ),
+
+              const SizedBox(height: 24),
+
+              // Optional image attachment
+              _buildSectionLabel('Image Attachment', isDark),
+              const SizedBox(height: 10),
+              _buildImageAttachment(isDark),
 
               const SizedBox(height: 24),
 
@@ -1236,6 +1258,320 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     }
   }
 
+  Widget _buildImageAttachment(bool isDark) {
+    final imagePath = _imagePath;
+    final hasImage = imagePath != null && imagePath.isNotEmpty;
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: hasImage
+          ? Container(
+              key: ValueKey(imagePath),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : AppColors.cardWhite,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      File(imagePath!),
+                      width: 92,
+                      height: 92,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 92,
+                          height: 92,
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          child: const Icon(
+                            Icons.broken_image_outlined,
+                            color: AppColors.primary,
+                            size: 32,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Image attached',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.darkTextPrimary
+                                : AppColors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            TextButton.icon(
+                              onPressed: _chooseImage,
+                              icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                              label: const Text('Replace'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _removeImage,
+                              icon: const Icon(Icons.delete_outline_rounded,
+                                  size: 18),
+                              label: const Text('Remove'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.danger,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : InkWell(
+              key: const ValueKey('no-image'),
+              onTap: _chooseImage,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 18,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkCard : AppColors.cardWhite,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark
+                        ? AppColors.darkTextSecondary.withValues(alpha: 0.35)
+                        : AppColors.textLight.withValues(alpha: 0.65),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Attach Image',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.darkTextPrimary
+                                  : AppColors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Camera or gallery',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.textGrey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  /// Android can destroy MainActivity while the system picker is open. The
+  /// plugin keeps the result available for retrieval after the activity is
+  /// recreated, so recover it before showing the normal task form.
+  Future<void> _recoverLostImage() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    try {
+      final lostData = await _imagePicker.retrieveLostData();
+      if (lostData.isEmpty || lostData.files == null || lostData.files!.isEmpty) {
+        return;
+      }
+      await _storePickedImage(lostData.files!.first);
+    } catch (error) {
+      debugPrint('Lost image recovery failed: $error');
+    }
+  }
+
+  Future<void> _chooseImage() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkCard : Colors.white,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
+          ),
+          child: SafeArea(
+            child: Wrap(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  child: Text(
+                    'Attach an image',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_camera_rounded,
+                      color: AppColors.primary),
+                  title: const Text('Capture from camera'),
+                  subtitle: const Text('Take a new photo for this task'),
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_rounded,
+                      color: AppColors.primary),
+                  title: const Text('Pick from gallery'),
+                  subtitle: const Text('Choose an existing photo'),
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null || !mounted) return;
+    if (!await _requestImagePermission(source)) return;
+
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+      if (picked == null) return;
+      await _storePickedImage(picked);
+    } catch (error) {
+      _showImageMessage('Could not attach that image. Please try again.');
+      debugPrint('Image attachment failed: $error');
+    }
+  }
+
+  Future<void> _storePickedImage(XFile picked) async {
+    final storedPath = await ImageStorageService.storePickedImage(
+      picked.path,
+      todoId: widget.todo?.id,
+    );
+    if (!mounted) {
+      unawaited(ImageStorageService.deleteIfOwned(storedPath));
+      return;
+    }
+
+    setState(() {
+      _imagePath = storedPath;
+      _draftImagePaths.add(storedPath);
+    });
+  }
+
+  Future<bool> _requestImagePermission(ImageSource source) async {
+    if (source == ImageSource.camera) {
+      final status = await Permission.camera.request();
+      if (status.isGranted) return true;
+      if (status.isPermanentlyDenied) await openAppSettings();
+      _showImageMessage(
+        'Camera permission is required to capture a task image.',
+      );
+      return false;
+    }
+
+    // On iOS, gallery access can be full or limited. Android's image_picker
+    // uses the system photo picker, which grants the selected image without
+    // requiring broad storage permission.
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final status = await Permission.photos.request();
+      if (status.isGranted || status.isLimited) return true;
+      if (status.isPermanentlyDenied) await openAppSettings();
+      _showImageMessage(
+        'Photo access is required to choose a gallery image.',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  void _removeImage() {
+    setState(() => _imagePath = null);
+  }
+
+  void _showImageMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.danger,
+      ),
+    );
+  }
+
+  Future<void> _cleanupImagesAfterSave() async {
+    final pathsToDelete = <String>{..._draftImagePaths};
+    if (_originalImagePath != null && _originalImagePath != _imagePath) {
+      pathsToDelete.add(_originalImagePath!);
+    }
+
+    for (final path in pathsToDelete) {
+      if (path != _imagePath) {
+        await ImageStorageService.deleteIfOwned(path);
+      }
+    }
+  }
+
   Future<void> _saveTodo() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -1247,6 +1583,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       category: _category,
       dueDate: _dueDate,
       reminderTime: _hasReminder ? _reminderTime : null,
+      imagePath: _imagePath,
       isCompleted: widget.todo?.isCompleted ?? false,
       createdAt: widget.todo?.createdAt ?? DateTime.now(),
     );
@@ -1280,6 +1617,15 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       return;
     }
 
+    try {
+      await _cleanupImagesAfterSave();
+    } catch (error) {
+      // The task is already saved; an attachment cleanup failure should not
+      // make the user think the task update failed.
+      debugPrint('Image cleanup failed: $error');
+    }
+    _didSave = true;
+
     if (!mounted) return;
     Navigator.pop(context);
     messenger.showSnackBar(
@@ -1294,6 +1640,14 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
 
   @override
   void dispose() {
+    // Picked images are first copied into app storage so they can be previewed
+    // immediately. If the user backs out without saving, remove those drafts
+    // but never touch the original image already attached to the task.
+    if (!_didSave) {
+      for (final path in _draftImagePaths) {
+        unawaited(ImageStorageService.deleteIfOwned(path));
+      }
+    }
     _titleController.dispose();
     _descController.dispose();
     _animController.dispose();

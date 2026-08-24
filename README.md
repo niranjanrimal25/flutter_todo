@@ -5,6 +5,8 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 ## Features
 
 - ✅ Create, edit, delete, and complete tasks
+- 🖼️ Optional task image attachments from the camera or gallery, with preview, replace, remove, and persistent local storage
+- 🚀 Native `flutter_native_splash` launch screen followed by an animated branded loading screen while local data loads
 - 🔔 **Recurring task reminders** — optional per-task ON/OFF reminders every two hours, with due-time anchoring, stable notification IDs, reboot/process-death recovery, and notification deep links back to the task
 - ⏰ **Alarm section** — set daily repeating alarms with labels and a **custom ringtone** (Classic Beep / Chime / Siren); they **ring exactly on time** — looping sound + continuous vibration from a foreground service, full-screen alert over the lock screen, Stop/Snooze on the notification and the ring screen — even when the app is killed or the phone was rebooted (alarms reschedule automatically at boot)
 - ⏱️ **Timer section** — countdown timer with presets (up to 2 hours) plus a **custom hours/minutes** option; a **live countdown stays in the notification** when the app is closed, and it **rings** the same way as an alarm when finished
@@ -34,13 +36,33 @@ flutter test
 - `lib/models/` — `todo.dart`, `alarm.dart` with SQLite (de)serialization
 - `lib/providers/` — `TodoProvider`, `AlarmProvider`, `ThemeProvider`
 - `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
-- `lib/services/` — `storage_service.dart` (sqflite), `notification_service.dart`
+- `lib/services/` — `storage_service.dart` (sqflite), `image_storage_service.dart`, `notification_service.dart`
 - `lib/widgets/` — todo cards, Nepali calendar widget, Nepali date picker dialog, empty state
 - `lib/utils/` — theme and shared constants
 
 ## Notes
 
 - Notifications are scheduled for the `Asia/Kathmandu` timezone.
+- Image attachments are copied from `image_picker`'s temporary cache into the
+  app's documents directory (`todo_images/`). The todo stores that stable
+  `imagePath` reference; replacing, removing, or deleting a task cleans up
+  app-owned old files without deleting originals from the user's gallery.
+- `flutter_native_splash` is configured in `pubspec.yaml` with the branded
+  purple background and logo. If native files need to be regenerated after a
+  splash configuration change, run:
+
+  ```bash
+  dart run flutter_native_splash:create
+  ```
+
+  Flutter then shows the existing animated branded loading screen while both
+  SQLite todos and alarms load, with a short minimum display time for a smooth
+  transition into the task list.
+- Camera access is requested only when Capture from camera is selected. iOS
+  requests Photos access (including limited-library access) for the gallery;
+  Android uses its system Photo Picker for gallery selection and does not ask
+  for broad storage access. Camera and photo usage descriptions are declared
+  in the platform manifests.
 - A task's nullable `reminderTime` is its Reminder ON/OFF state. While it is
   on, the recurring reminder runs every two hours. If the task has a due date
   and time, that is the cadence anchor; otherwise the selected reminder start

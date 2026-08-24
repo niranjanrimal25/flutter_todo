@@ -25,6 +25,7 @@ void main() {
         dueDate: DateTime(2026, 8, 25, 18, 0),
         reminderTime: DateTime(2026, 8, 25, 9, 0),
         category: 'Shopping',
+        imagePath: '/app/documents/todo_images/groceries.jpg',
       );
 
       final restored = Todo.fromMap(todo.toMap());
@@ -38,6 +39,7 @@ void main() {
       expect(restored.dueDate, todo.dueDate);
       expect(restored.reminderTime, todo.reminderTime);
       expect(restored.category, 'Shopping');
+      expect(restored.imagePath, '/app/documents/todo_images/groceries.jpg');
     });
 
     test('fromMap handles missing optional fields', () {
@@ -49,6 +51,7 @@ void main() {
       expect(restored.isCompleted, isFalse);
       expect(restored.priority, Priority.medium);
       expect(restored.category, 'General');
+      expect(restored.imagePath, isNull);
     });
 
     test('copyWith overrides only the provided fields', () {
@@ -58,11 +61,13 @@ void main() {
         description: 'B',
         priority: Priority.low,
         category: 'Work',
+        imagePath: '/documents/old.jpg',
       );
       final updated = todo.copyWith(
         title: 'Updated',
         priority: Priority.high,
         category: 'Personal',
+        imagePath: null,
       );
 
       expect(updated.id, 1);
@@ -71,6 +76,7 @@ void main() {
       expect(updated.priority, Priority.high);
       expect(updated.category, 'Personal');
       expect(updated.isCompleted, isFalse);
+      expect(updated.imagePath, isNull);
     });
 
     test('priority labels map correctly', () {

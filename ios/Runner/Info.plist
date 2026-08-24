@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Allow Niranjan Todo to capture an image for a task attachment.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow Niranjan Todo to choose an image for a task attachment.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

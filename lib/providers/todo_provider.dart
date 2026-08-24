@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/todo.dart';
+import '../services/image_storage_service.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../utils/constants.dart';
@@ -126,6 +127,14 @@ class TodoProvider extends ChangeNotifier {
 
   // Update todo
   Future<void> updateTodo(Todo todo) async {
+    Todo? previousTodo;
+    for (final existing in _todos) {
+      if (existing.id == todo.id) {
+        previousTodo = existing;
+        break;
+      }
+    }
+
     // Cancel first so a process death between the database write and the
     // reschedule cannot leave an old reminder running with stale task data.
     if (todo.id != null) {
@@ -138,6 +147,15 @@ class TodoProvider extends ChangeNotifier {
       _todos[index] = todo;
     }
 
+    final previousImagePath = previousTodo?.imagePath;
+    if (previousImagePath != null && previousImagePath != todo.imagePath) {
+      try {
+        await ImageStorageService.deleteIfOwned(previousImagePath);
+      } catch (error) {
+        debugPrint('Previous task image cleanup failed: $error');
+      }
+    }
+
     if (todo.id != null && todo.reminderTime != null && !todo.isCompleted) {
       await NotificationService.scheduleRecurringReminder(todo);
     }
@@ -148,11 +166,28 @@ class TodoProvider extends ChangeNotifier {
 
   // Delete todo
   Future<void> deleteTodo(int id) async {
+    Todo? deletedTodo;
+    for (final existing in _todos) {
+      if (existing.id == id) {
+        deletedTodo = existing;
+        break;
+      }
+    }
+
     // Cancel first so a killed process cannot leave a deleted task's native
     // Android alarm armed until the next app launch.
     await NotificationService.cancelRecurringReminder(id);
     await StorageService.deleteTodo(id);
     _todos.removeWhere((t) => t.id == id);
+
+    final deletedImagePath = deletedTodo?.imagePath;
+    if (deletedImagePath != null) {
+      try {
+        await ImageStorageService.deleteIfOwned(deletedImagePath);
+      } catch (error) {
+        debugPrint('Deleted task image cleanup failed: $error');
+      }
+    }
     notifyListeners();
     await _refreshPendingReminder();
   }
