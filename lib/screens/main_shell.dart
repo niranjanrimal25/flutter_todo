@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/todo_provider.dart';
 import '../providers/alarm_provider.dart';
+import '../services/notification_navigation.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'alarm_timer_screen.dart';
@@ -34,7 +35,12 @@ class _MainShellState extends State<MainShell> {
     } catch (_) {
       // Data loading must never block the UI — show the app anyway.
     }
-    if (mounted) setState(() => _loaded = true);
+    if (!mounted) return;
+    setState(() => _loaded = true);
+
+    // A notification tap can arrive before the SQLite-backed provider is
+    // ready. Try again after loading so cold-start taps open the exact task.
+    NotificationNavigation.tryOpenPendingTodo();
   }
 
   @override

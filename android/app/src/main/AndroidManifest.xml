@@ -50,6 +50,20 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
         </receiver>
+        <!-- Native recurring task reminder chain. It is independent of the
+             Flutter process, so it can fire while the app is force-killed and
+             rebuild its alarms after a reboot. -->
+        <receiver
+            android:name=".RecurringReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.todo_app.action.RECURRING_REMINDER"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+            </intent-filter>
+        </receiver>
     </application>
     <queries>
         <intent>

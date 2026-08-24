@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
 import '../providers/todo_provider.dart';
+import '../services/notification_service.dart';
 import '../utils/constants.dart';
 import '../widgets/nepali_date_picker_dialog.dart';
 
@@ -345,7 +346,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              'Set Reminder',
+                              'Reminder',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
@@ -361,20 +362,45 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                         Switch(
                           value: _hasReminder,
                           onChanged: (val) {
-                            setState(() {
-                              _hasReminder = val;
-                              if (val) {
-                                _pickReminderDateTime();
-                              } else {
+                            if (val) {
+                              // Enabling starts the two-hour cadence now. A
+                              // task without a due date can still tap the
+                              // start-time row below to choose another start.
+                              setState(() {
+                                _hasReminder = true;
+                                _reminderTime = DateTime.now();
+                              });
+                            } else {
+                              setState(() {
+                                _hasReminder = false;
                                 _reminderTime = null;
-                              }
-                            });
+                              });
+                            }
                           },
                           activeThumbColor: AppColors.primary,
                         ),
                       ],
                     ),
-                    if (_hasReminder && _reminderTime != null) ...[
+                    if (_hasReminder) ...[
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _dueDate != null
+                              ? 'Every 2 hours, starting at the due time'
+                              : 'Every 2 hours after the reminder start time',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textGrey,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (_hasReminder &&
+                        _dueDate == null &&
+                        _reminderTime != null) ...[
                       const Divider(),
                       InkWell(
                         onTap: _pickReminderDateTime,
@@ -1231,6 +1257,13 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     final messenger = ScaffoldMessenger.of(context);
 
     try {
+      if (_hasReminder) {
+        // Exact alarms and notifications are requested during app startup;
+        // Doze exemption is asked only when the user opts into recurring
+        // reminders so it is clear why Android is showing the prompt.
+        await NotificationService.requestBatteryOptimizationExemption();
+      }
+
       if (_isEditing) {
         await provider.updateTodo(todo);
       } else {

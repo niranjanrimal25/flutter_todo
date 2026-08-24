@@ -93,6 +93,18 @@ class TodoProvider extends ChangeNotifier {
   // Load all todos
   Future<void> loadTodos() async {
     _todos = await StorageService.getAllTodos();
+    // Re-arm persisted recurring reminders after a process restart. Android
+    // also repairs these natively at boot, while iOS refreshes its finite
+    // local-notification horizon whenever the app is opened.
+    for (final todo in _todos) {
+      if (todo.id == null) continue;
+      if (todo.reminderTime != null && !todo.isCompleted) {
+        await NotificationService.scheduleRecurringReminder(todo);
+      } else {
+        await NotificationService.cancelRecurringReminder(todo.id!);
+      }
+    }
+
     notifyListeners();
     await _refreshPendingReminder();
   }
@@ -103,9 +115,9 @@ class TodoProvider extends ChangeNotifier {
     todo = todo.copyWith(id: id);
     _todos.add(todo);
 
-    // Schedule notification
+    // Schedule the recurring reminder
     if (todo.reminderTime != null) {
-      await NotificationService.scheduleNotification(todo);
+      await NotificationService.scheduleRecurringReminder(todo);
     }
 
     notifyListeners();
@@ -114,18 +126,20 @@ class TodoProvider extends ChangeNotifier {
 
   // Update todo
   Future<void> updateTodo(Todo todo) async {
+    // Cancel first so a process death between the database write and the
+    // reschedule cannot leave an old reminder running with stale task data.
+    if (todo.id != null) {
+      await NotificationService.cancelRecurringReminder(todo.id!);
+    }
+
     await StorageService.updateTodo(todo);
     final index = _todos.indexWhere((t) => t.id == todo.id);
     if (index != -1) {
       _todos[index] = todo;
     }
 
-    // Reschedule notification
-    if (todo.id != null) {
-      await NotificationService.cancelNotification(todo.id!);
-      if (todo.reminderTime != null && !todo.isCompleted) {
-        await NotificationService.scheduleNotification(todo);
-      }
+    if (todo.id != null && todo.reminderTime != null && !todo.isCompleted) {
+      await NotificationService.scheduleRecurringReminder(todo);
     }
 
     notifyListeners();
@@ -134,8 +148,10 @@ class TodoProvider extends ChangeNotifier {
 
   // Delete todo
   Future<void> deleteTodo(int id) async {
+    // Cancel first so a killed process cannot leave a deleted task's native
+    // Android alarm armed until the next app launch.
+    await NotificationService.cancelRecurringReminder(id);
     await StorageService.deleteTodo(id);
-    await NotificationService.cancelNotification(id);
     _todos.removeWhere((t) => t.id == id);
     notifyListeners();
     await _refreshPendingReminder();
@@ -145,15 +161,17 @@ class TodoProvider extends ChangeNotifier {
   Future<void> toggleTodo(int id) async {
     final index = _todos.indexWhere((t) => t.id == id);
     if (index != -1) {
-      _todos[index] = _todos[index].copyWith(
+      final updated = _todos[index].copyWith(
         isCompleted: !_todos[index].isCompleted,
       );
-      await StorageService.updateTodo(_todos[index]);
+      // Always cancel the old schedule before changing persistence. A task
+      // marked complete must stop even if the process is killed mid-update.
+      await NotificationService.cancelRecurringReminder(id);
+      _todos[index] = updated;
+      await StorageService.updateTodo(updated);
 
-      if (_todos[index].isCompleted) {
-        await NotificationService.cancelNotification(id);
-      } else if (_todos[index].reminderTime != null) {
-        await NotificationService.scheduleNotification(_todos[index]);
+      if (!updated.isCompleted && updated.reminderTime != null) {
+        await NotificationService.scheduleRecurringReminder(updated);
       }
 
       notifyListeners();

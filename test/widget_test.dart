@@ -6,6 +6,7 @@ import 'package:todo_app/models/alarm.dart';
 import 'package:todo_app/models/timer_state.dart';
 import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/providers/todo_provider.dart';
+import 'package:todo_app/services/notification_service.dart';
 import 'package:todo_app/utils/constants.dart';
 import 'package:todo_app/widgets/empty_state.dart';
 import 'package:todo_app/widgets/nepali_calendar_widget.dart';
@@ -76,6 +77,21 @@ void main() {
       expect(Priority.low.label, 'Low');
       expect(Priority.medium.label, 'Medium');
       expect(Priority.high.label, 'High');
+    });
+
+    test('uses a stable notification namespace per task', () {
+      expect(
+        NotificationService.recurringReminderNotificationId(42),
+        1000042,
+      );
+      expect(
+        NotificationService.recurringReminderNotificationId(42),
+        NotificationService.recurringReminderNotificationId(42),
+      );
+      expect(
+        NotificationService.recurringReminderNotificationId(42),
+        isNot(NotificationService.recurringReminderNotificationId(43)),
+      );
     });
 
     test('sorts by priority, then newest creation date', () {

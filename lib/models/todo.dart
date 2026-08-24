@@ -8,6 +8,9 @@ class Todo {
   Priority priority;
   DateTime createdAt;
   DateTime? dueDate;
+  /// Null means the recurring two-hour reminder is OFF. When non-null it
+  /// stores the user-selected start time (the due date/time takes precedence
+  /// as the cadence anchor when present).
   DateTime? reminderTime;
   String category;
 

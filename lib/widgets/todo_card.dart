@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:intl/intl.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
 import '../utils/constants.dart';
@@ -192,8 +191,7 @@ class TodoCard extends StatelessWidget {
                             if (todo.reminderTime != null)
                               _buildChip(
                                 icon: Icons.notifications_active_rounded,
-                                label: DateFormat('hh:mm a')
-                                    .format(todo.reminderTime!),
+                                label: 'Every 2h',
                                 color: AppColors.primary,
                               ),
                             _buildChip(

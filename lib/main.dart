@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:alarm/alarm.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nepali_utils/nepali_utils.dart';
@@ -12,17 +13,30 @@ import 'providers/todo_provider.dart';
 import 'screens/main_shell.dart';
 import 'screens/ring_screen.dart';
 import 'services/alarm_scheduler.dart';
+import 'services/notification_navigation.dart';
 import 'services/notification_service.dart';
 import 'utils/theme.dart';
 
 /// Global navigator key so notification taps / full-screen intents can
 /// navigate (e.g. open the alarm ring screen) from outside the widget tree.
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> appNavigatorKey =
+    NotificationNavigation.navigatorKey;
+
+const MethodChannel _nativeNotificationChannel =
+    MethodChannel('todo_app/notification');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   NepaliUtils(Language.nepali);
+
+  // Android's native recurring reminder receiver uses this channel both to
+  // schedule alarms and to deliver task deep links when the app is launched
+  // from a notification tap. Register before the first frame so cold-start
+  // intents are not lost.
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    _configureNativeNotificationChannel();
+  }
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -31,8 +45,6 @@ void main() async {
   // Initialize the native alarm scheduler (AlarmManager + foreground service,
   // exact alarms, boot rescheduling). Required before scheduling any alarm.
   await AlarmRingScheduler.init();
-  // Clean up timer-end notifications scheduled by older app versions.
-  unawaited(NotificationService.cancelLegacyTimerEnd());
 
   // Initialize notifications in the background so the first frame is not
   // blocked on permission requests — the branded splash screen shows while
@@ -41,6 +53,8 @@ void main() async {
       .catchError((_) {
     debugPrint('Notification initialization failed (continuing anyway)');
   });
+  // Clean up timer-end notifications scheduled by older app versions.
+  unawaited(NotificationService.cancelLegacyTimerEnd());
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -91,12 +105,41 @@ void _openRingScreen(AlarmSettings alarm) {
   });
 }
 
-/// Handles flutter_local_notifications taps (todo reminders etc.).
+void _configureNativeNotificationChannel() {
+  _nativeNotificationChannel.setMethodCallHandler((call) async {
+    if (call.method != 'openTodo') return;
+
+    final todoId = call.arguments is num
+        ? (call.arguments as num).toInt()
+        : int.tryParse(call.arguments?.toString() ?? '');
+    if (todoId != null && todoId > 0) {
+      NotificationNavigation.requestOpenTodo(todoId);
+    }
+  });
+
+  // MainActivity holds a cold-start task id until Dart has registered this
+  // handler and announces that it is ready.
+  unawaited(
+    _nativeNotificationChannel.invokeMethod<void>('ready').catchError((error) {
+      debugPrint('Native notification channel unavailable: $error');
+    }),
+  );
+}
+
+/// Handles flutter_local_notifications taps (the iOS implementation and
+/// legacy scheduled notifications). The Android recurring implementation
+/// sends the same task id through MainActivity's native channel.
 void _handleNotificationTap(String payload) {
-  // Alarm/timer rings are handled by Alarm.ringing; this is only for the
-  // softer notifications (todo ids, 'pending_reminder', 'timer_running'),
-  // which just open the app normally.
-  debugPrint('Notification tapped: $payload');
+  final normalized = payload.startsWith('todo:')
+      ? payload.substring('todo:'.length)
+      : payload;
+  final todoId = int.tryParse(normalized);
+  if (todoId != null && todoId > 0) {
+    NotificationNavigation.requestOpenTodo(todoId);
+  } else {
+    // Alarm/timer rings and the pending-task nudge do not target one task.
+    debugPrint('Notification tapped: $payload');
+  }
 }
 
 class MyApp extends StatelessWidget {

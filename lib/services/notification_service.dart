@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
 import '../models/todo.dart';
-import '../utils/constants.dart' as app;
 
 /// Handles the "soft" notifications (todo reminders, pending-task nudge, the
 /// running-timer chronometer). Real alarm/timer RINGING is delegated to the
@@ -18,6 +20,18 @@ class NotificationService {
   static const int _timerRunningId = 200001;
   static const int _pendingReminderId = 300000;
 
+  /// Reserved namespace for per-task recurring reminders. Alarm/timer ids
+  /// use other ranges, so changing a task reminder can never cancel one of
+  /// those notifications.
+  static const int recurringReminderNotificationIdBase = 1000000;
+  static const int _iosReminderIdBase = 2000000;
+  static const int _iosReminderSlots = 64;
+  static const Duration recurringReminderInterval = Duration(hours: 2);
+  static const MethodChannel _nativeReminderChannel =
+      MethodChannel('todo_app/notification');
+
+  static Future<void>? _initializationFuture;
+
   /// Legacy notification IDs used by the previous flutter_local_notifications
   /// based alarm implementation. Kept only to clean up schedules that were
   /// created by older app versions (daily alarm ids were 100000 + alarm id,
@@ -29,9 +43,12 @@ class NotificationService {
 
   static Future<void> initialize({
     void Function(String payload)? onNotificationTap,
-  }) async {
+  }) {
     _onNotificationTap = onNotificationTap;
+    return _initializationFuture ??= _initialize();
+  }
 
+  static Future<void> _initialize() async {
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Kathmandu'));
 
@@ -60,7 +77,68 @@ class NotificationService {
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
-    await _requestPermissions();
+    // Do not make the first frame wait for Android's permission/settings UI.
+    // Scheduling methods await plugin initialization, but permission requests
+    // continue in the background and are also re-requested when needed.
+    unawaited(_requestPermissions().catchError((error) {
+      debugPrint('Notification permission request failed: $error');
+    }));
+
+    // A tap can launch a terminated app without going through the normal
+    // response callback. Forward that payload to the same deep-link handler.
+    final launchDetails =
+        await _notifications.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      final payload = launchDetails?.notificationResponse?.payload;
+      if (payload != null) _onNotificationTap?.call(payload);
+    }
+  }
+
+  static Future<void> _waitForInitialization() async {
+    final initialization = _initializationFuture;
+    if (initialization != null) await initialization;
+  }
+
+  static Future<void> _requestPermissions() async {
+    final notifStatus = await Permission.notification.request();
+    debugPrint('Notification permission: $notifStatus');
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final alarmStatus = await Permission.scheduleExactAlarm.request();
+      debugPrint('Exact alarm permission: $alarmStatus');
+
+      final androidPlugin =
+          _notifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      if (androidPlugin != null) {
+        await androidPlugin.requestNotificationsPermission();
+        await androidPlugin.requestExactAlarmsPermission();
+      }
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final iosPlugin = _notifications.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      if (iosPlugin != null) {
+        await iosPlugin.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
+    }
+  }
+
+  /// Opens Android's system prompt to exempt the app from Doze. This is
+  /// intentionally user initiated (when enabling a recurring reminder) rather
+  /// than an intrusive prompt on every app launch.
+  static Future<void> requestBatteryOptimizationExemption() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    final status = await Permission.ignoreBatteryOptimizations.status;
+    if (status.isGranted) return;
+
+    final result = await Permission.ignoreBatteryOptimizations.request();
+    if (result.isPermanentlyDenied) await openAppSettings();
   }
 
   /// Runs in a background isolate when the app is not running.
@@ -70,87 +148,166 @@ class NotificationService {
     debugPrint('Background notification tap: ${response.payload}');
   }
 
-  static Future<void> _requestPermissions() async {
-    final notifStatus = await Permission.notification.request();
-    debugPrint('Notification permission: $notifStatus');
-
-    final alarmStatus = await Permission.scheduleExactAlarm.request();
-    debugPrint('Exact alarm permission: $alarmStatus');
-
-    final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-
-    if (androidPlugin != null) {
-      await androidPlugin.requestNotificationsPermission();
-      await androidPlugin.requestExactAlarmsPermission();
-    }
-
-    final iosPlugin = _notifications.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    if (iosPlugin != null) {
-      await iosPlugin.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }
-  }
 
   // ===== Todo reminders =====
 
-  static Future<void> scheduleNotification(Todo todo) async {
-    if (todo.reminderTime == null || todo.id == null) {
-      debugPrint('Cannot schedule: reminderTime or id is null');
+  /// Stable Android notification id for a task. The native Android receiver
+  /// uses the same namespace.
+  static int recurringReminderNotificationId(int todoId) =>
+      recurringReminderNotificationIdBase + todoId;
+
+  static int _iosReminderNotificationId(int todoId, int slot) =>
+      _iosReminderIdBase + (todoId * _iosReminderSlots) + slot;
+
+  /// Schedules an every-two-hours reminder for a task. On Android the actual
+  /// schedule lives in [RecurringReminderReceiver], not in a Dart timer, so
+  /// it survives process death and reboot. iOS receives a finite horizon of
+  /// system-owned local notifications (see [_iosReminderSlots]).
+  static Future<void> scheduleRecurringReminder(Todo todo) async {
+    if (todo.id == null || todo.isCompleted || todo.reminderTime == null) {
+      debugPrint('Cannot schedule recurring reminder: task is not eligible');
       return;
     }
 
-    if (todo.reminderTime!.isBefore(DateTime.now())) {
-      debugPrint('Cannot schedule: reminder time is in the past');
+    await _waitForInitialization();
+    await cancelRecurringReminder(todo.id!);
+
+    final now = tz.TZDateTime.now(tz.local);
+    final start = todo.dueDate ?? todo.reminderTime!;
+    final configuredStart = tz.TZDateTime.from(start, tz.local);
+    final firstAt = _nextRecurringOccurrence(configuredStart, now);
+    final body = todo.description.isNotEmpty
+        ? todo.description
+        : 'Time to work on this task.';
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await _nativeReminderChannel.invokeMethod<void>(
+          'scheduleRecurringReminder',
+          {
+            'taskId': todo.id,
+            'title': todo.title,
+            'body': body,
+            'firstAtMillis': firstAt.millisecondsSinceEpoch,
+          },
+        );
+        debugPrint(
+            'Recurring reminder scheduled for task ${todo.id} at $firstAt');
+      } catch (error) {
+        debugPrint('Android recurring reminder failed: $error');
+      }
       return;
     }
 
-    await cancelNotification(todo.id!);
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await _scheduleIosReminderHorizon(
+        todo: todo,
+        firstAt: firstAt,
+        now: now,
+        body: body,
+      );
+    }
+  }
 
-    final scheduledDate = tz.TZDateTime.from(todo.reminderTime!, tz.local);
+  static tz.TZDateTime _nextRecurringOccurrence(
+    tz.TZDateTime start,
+    tz.TZDateTime now,
+  ) {
+    if (start.isAfter(now)) return start;
 
-    final androidDetails = AndroidNotificationDetails(
-      'todo_reminders',
-      'Todo Reminders',
-      channelDescription: 'Reminders for your todo tasks',
-      importance: Importance.max,
-      priority: todo.priority == app.Priority.high
-          ? Priority.high
-          : Priority.defaultPriority,
+    final elapsed = now.difference(start).inSeconds;
+    final intervals = elapsed ~/ recurringReminderInterval.inSeconds + 1;
+    return start.add(recurringReminderInterval * intervals);
+  }
+
+  static Future<void> _scheduleIosReminderHorizon({
+    required Todo todo,
+    required tz.TZDateTime firstAt,
+    required tz.TZDateTime now,
+    required String body,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'todo_recurring_reminders',
+      'Recurring Task Reminders',
+      channelDescription: 'Reminds you about enabled tasks every two hours',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
       icon: '@mipmap/ic_launcher',
       playSound: true,
       enableVibration: true,
-      fullScreenIntent: false,
       category: AndroidNotificationCategory.reminder,
       visibility: NotificationVisibility.public,
-      styleInformation: BigTextStyleInformation(
-        todo.description.isNotEmpty ? todo.description : todo.title,
-        contentTitle: '📋 ${todo.title}',
-        summaryText: '${todo.category} • ${todo.priority.label} Priority',
+    );
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        threadIdentifier: 'todo-recurring-reminders',
       ),
     );
 
-    final details = NotificationDetails(android: androidDetails);
+    for (var slot = 0; slot < _iosReminderSlots; slot++) {
+      final scheduledDate =
+          firstAt.add(recurringReminderInterval * slot);
+      if (!scheduledDate.isAfter(now)) continue;
 
+      try {
+        await _notifications.zonedSchedule(
+          id: _iosReminderNotificationId(todo.id!, slot),
+          title: '📋 ${todo.title}',
+          body: body,
+          scheduledDate: scheduledDate,
+          notificationDetails: details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: 'todo:${todo.id}',
+        );
+      } catch (error) {
+        debugPrint('iOS recurring reminder slot failed: $error');
+      }
+    }
+    debugPrint(
+        'iOS reminder horizon scheduled for task ${todo.id} from $firstAt');
+  }
+
+  /// Cancels both the native Android chain and all finite iOS horizon slots.
+  /// Also removes the old one-shot id used by previous app versions.
+  static Future<void> cancelRecurringReminder(int todoId) async {
+    await _waitForInitialization();
+
+    // Keep cancellation best-effort per backend. In particular, a plugin
+    // cancellation failure must not prevent the native Android alarm from
+    // being disarmed when a task is completed or deleted.
     try {
-      await _notifications.zonedSchedule(
-        id: todo.id!,
-        title: '📋 Todo Reminder',
-        body: todo.title,
-        scheduledDate: scheduledDate,
-        notificationDetails: details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: todo.id.toString(),
-      );
-      debugPrint('✅ Notification scheduled successfully!');
-    } catch (e) {
-      debugPrint('❌ Error scheduling notification: $e');
+      await cancelNotification(todoId);
+    } catch (error) {
+      debugPrint('Legacy reminder cancellation failed: $error');
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await _nativeReminderChannel.invokeMethod<void>(
+          'cancelRecurringReminder',
+          todoId,
+        );
+      } catch (error) {
+        debugPrint('Android recurring reminder cancellation failed: $error');
+      }
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      for (var slot = 0; slot < _iosReminderSlots; slot++) {
+        try {
+          await cancelNotification(_iosReminderNotificationId(todoId, slot));
+        } catch (error) {
+          debugPrint('iOS reminder slot cancellation failed: $error');
+        }
+      }
     }
   }
+
+  /// Backwards-compatible name for callers of the old one-shot API.
+  static Future<void> scheduleNotification(Todo todo) =>
+      scheduleRecurringReminder(todo);
 
   // ===== Running-timer chronometer =====
 
@@ -261,11 +418,13 @@ class NotificationService {
   /// Cancels the daily-alarm notification that old versions scheduled via
   /// flutter_local_notifications (id = 100000 + alarm id).
   static Future<void> cancelLegacyAlarmNotification(int alarmId) async {
+    await _waitForInitialization();
     await cancelNotification(_legacyAlarmIdBase + alarmId);
   }
 
   /// Cancels the old timer-end notification (id 200000).
   static Future<void> cancelLegacyTimerEnd() async {
+    await _waitForInitialization();
     await cancelNotification(_legacyTimerEndId);
   }
 
