@@ -178,6 +178,47 @@ class TodoCard extends StatelessWidget {
                             ),
                           ),
                         ],
+                        if (todo.hasSubtasks) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.checklist_rounded,
+                                size: 14,
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : AppColors.textGrey,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                '${todo.completedSubtaskCount}/${todo.subtasks.length}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? AppColors.darkTextSecondary
+                                      : AppColors.textGrey,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    minHeight: 5,
+                                    value: todo.subtaskProgress,
+                                    backgroundColor: AppColors.primary
+                                        .withValues(alpha: 0.12),
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                      AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,

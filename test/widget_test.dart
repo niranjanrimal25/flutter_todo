@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 
 import 'package:todo_app/models/alarm.dart';
+import 'package:todo_app/models/subtask.dart';
 import 'package:todo_app/models/timer_state.dart';
 import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/providers/todo_provider.dart';
@@ -26,6 +27,10 @@ void main() {
         reminderTime: DateTime(2026, 8, 25, 9, 0),
         category: 'Shopping',
         imagePath: '/app/documents/todo_images/groceries.jpg',
+        subtasks: [
+          Subtask(title: 'Buy milk', isCompleted: true),
+          Subtask(title: 'Buy bread'),
+        ],
       );
 
       final restored = Todo.fromMap(todo.toMap());
@@ -40,6 +45,12 @@ void main() {
       expect(restored.reminderTime, todo.reminderTime);
       expect(restored.category, 'Shopping');
       expect(restored.imagePath, '/app/documents/todo_images/groceries.jpg');
+      expect(restored.subtasks, hasLength(2));
+      expect(restored.subtasks[0].title, 'Buy milk');
+      expect(restored.subtasks[0].isCompleted, isTrue);
+      expect(restored.subtasks[1].title, 'Buy bread');
+      expect(restored.completedSubtaskCount, 1);
+      expect(restored.subtaskProgress, 0.5);
     });
 
     test('fromMap handles missing optional fields', () {
@@ -68,6 +79,7 @@ void main() {
         priority: Priority.high,
         category: 'Personal',
         imagePath: null,
+        subtasks: [Subtask(title: 'Do it')],
       );
 
       expect(updated.id, 1);
@@ -77,6 +89,8 @@ void main() {
       expect(updated.category, 'Personal');
       expect(updated.isCompleted, isFalse);
       expect(updated.imagePath, isNull);
+      expect(updated.subtasks, hasLength(1));
+      expect(updated.subtasks.single.title, 'Do it');
     });
 
     test('priority labels map correctly', () {

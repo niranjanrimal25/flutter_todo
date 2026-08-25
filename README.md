@@ -6,6 +6,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 
 - ✅ Create, edit, delete, and complete tasks
 - 🖼️ Optional task image attachments from the camera or gallery, with preview, replace, remove, and persistent local storage
+- ☑️ Subtasks / checklists with add, edit, delete, completion toggles, and progress tracking
 - 🚀 Native `flutter_native_splash` launch screen followed by an animated branded loading screen while local data loads
 - 🔔 **Recurring task reminders** — optional per-task ON/OFF reminders every two hours, with due-time anchoring, stable notification IDs, reboot/process-death recovery, and notification deep links back to the task
 - ⏰ **Alarm section** — set daily repeating alarms with labels and a **custom ringtone** (Classic Beep / Chime / Siren); they **ring exactly on time** — looping sound + continuous vibration from a foreground service, full-screen alert over the lock screen, Stop/Snooze on the notification and the ring screen — even when the app is killed or the phone was rebooted (alarms reschedule automatically at boot)
@@ -33,7 +34,7 @@ flutter test
 
 ## Project structure
 
-- `lib/models/` — `todo.dart`, `alarm.dart` with SQLite (de)serialization
+- `lib/models/` — `todo.dart`, `subtask.dart`, and `alarm.dart` with SQLite (de)serialization
 - `lib/providers/` — `TodoProvider`, `AlarmProvider`, `ThemeProvider`
 - `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
 - `lib/services/` — `storage_service.dart` (sqflite), `image_storage_service.dart`, `notification_service.dart`
@@ -47,6 +48,9 @@ flutter test
   app's documents directory (`todo_images/`). The todo stores that stable
   `imagePath` reference; replacing, removing, or deleting a task cleans up
   app-owned old files without deleting originals from the user's gallery.
+- Subtasks are stored as JSON in the todo row so existing installations can
+  migrate in place. A task card shows checklist progress, while the add/edit
+  screen provides add, edit, delete, and completion controls.
 - `flutter_native_splash` is configured in `pubspec.yaml` with the branded
   purple background and logo. If native files need to be regenerated after a
   splash configuration change, run:

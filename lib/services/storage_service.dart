@@ -6,7 +6,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 5;
+  static const int _dbVersion = 6;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -33,7 +33,8 @@ class StorageService {
             dueDate TEXT,
             reminderTime TEXT,
             category TEXT DEFAULT 'General',
-            imagePath TEXT
+            imagePath TEXT,
+            subtasks TEXT
           )
         ''');
         await db.execute('''
@@ -72,6 +73,11 @@ class StorageService {
         if (oldVersion < 5) {
           await db.execute('''
             ALTER TABLE todos ADD COLUMN imagePath TEXT
+          ''');
+        }
+        if (oldVersion < 6) {
+          await db.execute('''
+            ALTER TABLE todos ADD COLUMN subtasks TEXT
           ''');
         }
       },

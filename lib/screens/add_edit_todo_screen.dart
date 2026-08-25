@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:nepali_utils/nepali_utils.dart';
+import '../models/subtask.dart';
 import '../models/todo.dart';
 import '../providers/todo_provider.dart';
 import '../services/image_storage_service.dart';
@@ -35,6 +36,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   final Set<String> _draftImagePaths = <String>{};
   String? _imagePath;
   String? _originalImagePath;
+  final List<Subtask> _subtasks = <Subtask>[];
   bool _didSave = false;
   late Priority _priority;
   late String _category;
@@ -66,6 +68,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
         TextEditingController(text: widget.todo?.description ?? '');
     _imagePath = widget.todo?.imagePath;
     _originalImagePath = widget.todo?.imagePath;
+    _subtasks.addAll(widget.todo?.subtasks ?? const <Subtask>[]);
     _priority = widget.todo?.priority ?? Priority.medium;
     _category = widget.todo?.category ?? 'General';
     _dueDate = widget.todo?.dueDate;
@@ -151,6 +154,13 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
               _buildSectionLabel('Image Attachment', isDark),
               const SizedBox(height: 10),
               _buildImageAttachment(isDark),
+
+              const SizedBox(height: 24),
+
+              // Subtasks / checklist
+              _buildSectionLabel('Subtasks / Checklist', isDark),
+              const SizedBox(height: 10),
+              _buildSubtasksEditor(isDark),
 
               const SizedBox(height: 24),
 
@@ -1258,6 +1268,212 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     }
   }
 
+  Widget _buildSubtasksEditor(bool isDark) {
+    final completed = _subtasks.where((subtask) => subtask.isCompleted).length;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? AppColors.darkTextSecondary.withValues(alpha: 0.3)
+              : AppColors.textLight.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Column(
+        children: [
+          if (_subtasks.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.checklist_rounded,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.textGrey,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Break this task into smaller steps',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textGrey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 6, 4, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$completed of ${_subtasks.length} completed',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textGrey,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 92,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        minHeight: 6,
+                        value: _subtasks.isEmpty
+                            ? 0
+                            : completed / _subtasks.length,
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ..._subtasks.asMap().entries.map((entry) {
+              final index = entry.key;
+              final subtask = entry.value;
+              return _buildSubtaskRow(index, subtask, isDark);
+            }),
+          ],
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _showSubtaskDialog(),
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('Add subtask'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubtaskRow(int index, Subtask subtask, bool isDark) {
+    final textColor = isDark ? AppColors.darkTextPrimary : AppColors.textDark;
+    return Row(
+      children: [
+        Checkbox(
+          value: subtask.isCompleted,
+          activeColor: AppColors.primary,
+          onChanged: (value) {
+            setState(() {
+              _subtasks[index] = subtask.copyWith(
+                isCompleted: value ?? false,
+              );
+            });
+          },
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: () => _showSubtaskDialog(index: index),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                subtask.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: subtask.isCompleted
+                      ? (isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.textLight)
+                      : textColor,
+                  fontSize: 14,
+                  decoration: subtask.isCompleted
+                      ? TextDecoration.lineThrough
+                      : null,
+                ),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Delete subtask',
+          onPressed: () => setState(() => _subtasks.removeAt(index)),
+          icon: const Icon(Icons.delete_outline_rounded,
+              color: AppColors.danger, size: 20),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showSubtaskDialog({int? index}) async {
+    final controller = TextEditingController(
+      text: index == null ? '' : _subtasks[index].title,
+    );
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(index == null ? 'Add subtask' : 'Edit subtask'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 120,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              hintText: 'What is the next step?',
+            ),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(dialogContext, value.trim());
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isNotEmpty) {
+                  Navigator.pop(dialogContext, value);
+                }
+              },
+              child: Text(index == null ? 'Add' : 'Save'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+
+    if (title == null || !mounted) return;
+    setState(() {
+      if (index == null) {
+        _subtasks.add(Subtask(title: title));
+      } else {
+        _subtasks[index] = _subtasks[index].copyWith(title: title);
+      }
+    });
+  }
+
   Widget _buildImageAttachment(bool isDark) {
     final imagePath = _imagePath;
     final hasImage = imagePath != null && imagePath.isNotEmpty;
@@ -1584,6 +1800,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       dueDate: _dueDate,
       reminderTime: _hasReminder ? _reminderTime : null,
       imagePath: _imagePath,
+      subtasks: List<Subtask>.of(_subtasks),
       isCompleted: widget.todo?.isCompleted ?? false,
       createdAt: widget.todo?.createdAt ?? DateTime.now(),
     );

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import '../utils/constants.dart';
+import 'subtask.dart';
 
 class Todo {
   static const Object _imagePathUnset = Object();
@@ -17,6 +20,7 @@ class Todo {
   String category;
   /// Absolute path to the task's locally copied image, when attached.
   String? imagePath;
+  List<Subtask> subtasks;
 
   Todo({
     this.id,
@@ -29,7 +33,18 @@ class Todo {
     this.reminderTime,
     this.category = 'General',
     this.imagePath,
-  }) : createdAt = createdAt ?? DateTime.now();
+    List<Subtask>? subtasks,
+  })  : subtasks = List<Subtask>.of(subtasks ?? const <Subtask>[]),
+        createdAt = createdAt ?? DateTime.now();
+
+  bool get hasSubtasks => subtasks.isNotEmpty;
+
+  int get completedSubtaskCount =>
+      subtasks.where((subtask) => subtask.isCompleted).length;
+
+  double get subtaskProgress => subtasks.isEmpty
+      ? 0
+      : completedSubtaskCount / subtasks.length;
 
   Map<String, dynamic> toMap() {
     return {
@@ -43,7 +58,28 @@ class Todo {
       'reminderTime': reminderTime?.toIso8601String(),
       'category': category,
       'imagePath': imagePath,
+      'subtasks': jsonEncode(
+        subtasks.map((subtask) => subtask.toMap()).toList(),
+      ),
     };
+  }
+
+  static List<Subtask> _subtasksFromStorage(dynamic raw) {
+    if (raw == null) return [];
+
+    try {
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is! List) return [];
+
+      return decoded
+          .whereType<Map>()
+          .map((item) => Subtask.fromMap(Map<String, dynamic>.from(item)))
+          .where((subtask) => subtask.title.trim().isNotEmpty)
+          .toList();
+    } catch (_) {
+      // A malformed value should not prevent older tasks from loading.
+      return [];
+    }
   }
 
   factory Todo.fromMap(Map<String, dynamic> map) {
@@ -61,6 +97,7 @@ class Todo {
           : null,
       category: (map['category'] as String?) ?? 'General',
       imagePath: map['imagePath'] as String?,
+      subtasks: _subtasksFromStorage(map['subtasks']),
     );
   }
 
@@ -75,6 +112,7 @@ class Todo {
     DateTime? reminderTime,
     String? category,
     Object? imagePath = _imagePathUnset,
+    List<Subtask>? subtasks,
   }) {
     return Todo(
       id: id ?? this.id,
@@ -89,6 +127,7 @@ class Todo {
       imagePath: identical(imagePath, _imagePathUnset)
           ? this.imagePath
           : imagePath as String?,
+      subtasks: subtasks ?? this.subtasks,
     );
   }
 }
