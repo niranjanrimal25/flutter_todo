@@ -83,7 +83,10 @@ void _openRingScreen(AlarmSettings alarm) {
   _ringScreenOpen = true;
 
   final payload = alarm.payload;
-  final isAlarm = payload == null || !payload.contains('"t":"t"');
+  final isTimer = payload != null && payload.contains('"t":"t"');
+  final isRecurringReminder =
+      payload != null && payload.contains('"t":"r"');
+  final isAlarm = !isTimer;
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
     final navigator = appNavigatorKey.currentState;
@@ -97,7 +100,12 @@ void _openRingScreen(AlarmSettings alarm) {
         builder: (_) => RingScreen(
           alarmSettings: alarm,
           isAlarm: isAlarm,
-          title: isAlarm ? 'Alarm' : 'Timer finished',
+          isRecurringReminder: isRecurringReminder,
+          title: isRecurringReminder
+              ? 'Task reminder'
+              : isAlarm
+                  ? 'Alarm'
+                  : 'Timer finished',
           onClosed: () => _ringScreenOpen = false,
         ),
       ),

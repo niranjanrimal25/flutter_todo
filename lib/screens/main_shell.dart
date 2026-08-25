@@ -58,11 +58,33 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 500),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      child: _loaded ? _buildMain(context) : const _AnimatedAppSplash(),
+    // Keep both layers mounted during the transition instead of replacing a
+    // provider-dependent subtree inside AnimatedSwitcher. That avoids
+    // deactivating inherited dependents while a notification/deep-link route
+    // is being attached, which can trigger Flutter's `_dependents.isEmpty`
+    // assertion on some Flutter versions.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        IgnorePointer(
+          ignoring: _loaded,
+          child: AnimatedOpacity(
+            opacity: _loaded ? 0 : 1,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOut,
+            child: const _AnimatedAppSplash(),
+          ),
+        ),
+        IgnorePointer(
+          ignoring: !_loaded,
+          child: AnimatedOpacity(
+            opacity: _loaded ? 1 : 0,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeIn,
+            child: _buildMain(context),
+          ),
+        ),
+      ],
     );
   }
 

@@ -17,6 +17,13 @@ import 'package:flutter/material.dart';
 class AlarmRingScheduler {
   static const int timerAlarmId = 500000;
 
+  /// Separate AlarmManager/notification namespace for recurring task alarms.
+  /// Regular alarms use their database ids and the timer uses [timerAlarmId].
+  static const int recurringReminderIdBase = 600000;
+
+  static int recurringReminderId(int todoId) =>
+      recurringReminderIdBase + todoId;
+
   /// Bundled ringtones the user can pick per alarm.
   static const List<({String label, String asset})> ringtones = [
     (label: 'Classic Beep', asset: 'assets/sounds/alarm.wav'),
@@ -73,6 +80,36 @@ class AlarmRingScheduler {
     );
   }
 
+  /// Schedules a task reminder using the exact same alarm/foreground-service
+  /// path as regular alarms. The receiver keeps the ringtone and vibration
+  /// alive until the user acts on the alarm.
+  static Future<void> scheduleRecurringReminder({
+    required int todoId,
+    required DateTime firstAt,
+    required String title,
+    required String body,
+  }) async {
+    final payload = jsonEncode({
+      't': 'r',
+      'id': todoId,
+      'label': title,
+      'body': body,
+      'ring': ringtones.first.asset,
+    });
+
+    await _set(
+      id: recurringReminderId(todoId),
+      dateTime: firstAt,
+      label: title,
+      notificationBody: body,
+      ringtone: ringtones.first.asset,
+      payload: payload,
+      allowAlarmOverlap: true,
+      allowSameSecondScheduling: true,
+      androidStopAlarmOnTermination: false,
+    );
+  }
+
   /// Schedules the (one-shot) timer-end alarm.
   static Future<void> scheduleTimerEnd({required DateTime endTime}) async {
     final payload = jsonEncode({'t': 't'});
@@ -111,6 +148,37 @@ class AlarmRingScheduler {
     );
   }
 
+  /// Snoozes a recurring task reminder while preserving its recurring
+  /// payload. When it rings again, the ring screen knows to re-arm the normal
+  /// two-hour occurrence after the user stops it.
+  static Future<void> snoozeRecurringReminder({
+    required int todoId,
+    required String title,
+    required String body,
+    required int minutes,
+  }) async {
+    final id = recurringReminderId(todoId);
+    await Alarm.stop(id);
+    final payload = jsonEncode({
+      't': 'r',
+      'id': todoId,
+      'label': title,
+      'body': body,
+      'ring': ringtones.first.asset,
+    });
+    await _set(
+      id: id,
+      dateTime: DateTime.now().add(Duration(minutes: minutes)),
+      label: title,
+      notificationBody: body,
+      ringtone: ringtones.first.asset,
+      payload: payload,
+      allowAlarmOverlap: true,
+      allowSameSecondScheduling: true,
+      androidStopAlarmOnTermination: false,
+    );
+  }
+
   static Future<void> stop(int id) async {
     try {
       await Alarm.stop(id);
@@ -125,8 +193,12 @@ class AlarmRingScheduler {
     required int id,
     required DateTime dateTime,
     required String label,
+    String notificationBody = 'Time to get up!',
     required String ringtone,
     required String payload,
+    bool allowAlarmOverlap = false,
+    bool allowSameSecondScheduling = false,
+    bool androidStopAlarmOnTermination = true,
   }) async {
     try {
       await Alarm.set(
@@ -140,8 +212,13 @@ class AlarmRingScheduler {
           androidFullScreenIntent: true,
           // Native snooze action on the notification (Android only).
           androidSnoozeDuration: const Duration(minutes: 5),
+          // Keep scheduled task reminders alive when the app task is swiped
+          // away; AlarmManager + the foreground service own the ring.
+          androidStopAlarmOnTermination: androidStopAlarmOnTermination,
           // On iOS a killed app cannot ring; warn the user instead.
           warningNotificationOnKill: Platform.isIOS,
+          allowAlarmOverlap: allowAlarmOverlap,
+          allowSameSecondScheduling: allowSameSecondScheduling,
           // Gentle 5-second volume fade instead of an abrupt blare.
           volumeSettings: VolumeSettings.fade(
             volume: 0.9,
@@ -150,9 +227,12 @@ class AlarmRingScheduler {
           payload: payload,
           notificationSettings: NotificationSettings(
             title: '⏰ $label',
-            body: 'Time to get up!',
+            body: notificationBody,
             stopButton: 'Stop',
             androidSnoozeButton: 'Snooze',
+            // A swipe must not silence a ringing reminder. It must be stopped
+            // with the explicit Stop action or the full-screen UI.
+            androidStopAlarmOnDismiss: false,
             icon: 'ic_alarm_notification',
             iconColor: const Color(0xFF6C63FF),
           ),

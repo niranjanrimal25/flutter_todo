@@ -72,18 +72,26 @@ flutter test
   and time, that is the cadence anchor; otherwise the selected reminder start
   time is used. Editing the task re-arms the schedule, while completing,
   deleting, or turning the toggle off cancels it.
-- **Android recurring reminders use a native exact `AlarmManager` chain.** The
-  receiver schedules only the next occurrence with
-  `setExactAndAllowWhileIdle()`, posts the notification, and schedules the
-  following occurrence. The task metadata is stored in app preferences so the
-  receiver does not need a Dart isolate while the app is killed. A boot,
-  package-update, or timezone-change broadcast rebuilds the chain. This is
-  more reliable for a two-hour user-visible reminder than a Dart-side chained
-  `zonedSchedule` (the Dart callback cannot run when the process is dead), and
-  more timely than WorkManager (periodic work is deliberately inexact and can
-  be deferred). It also avoids `setInexactRepeating()` drift while correcting
-  for Doze delays. If exact-alarm special access is denied, it falls back to an
-  allow-while-idle inexact alarm and continues working.
+- **Android recurring reminders use the same `alarm` plugin path as alarms.**
+  Each task reminder is an `AlarmSettings` entry backed by the plugin's exact
+  `AlarmManager` schedule and foreground service, with the same bundled
+  looping ringtone, repeating vibration, full-screen intent, Stop button, and
+  Snooze button. The plugin owns the native schedule, so it continues through
+  Flutter process death and restores pending schedules after boot. The app
+  re-arms the next two-hour occurrence after Stop when the task is still
+  pending and its reminder is still enabled. If exact-alarm special access is
+  denied, the plugin falls back to its allow-while-idle inexact path.
+- This is intentionally not a basic `flutter_local_notifications` call: that
+  API is still used for soft reminders and the timer chronometer, but task
+  reminders go through `AlarmRingScheduler` so they do not auto-dismiss or
+  fall back to the short notification ping. A server/OS scheduler would still
+  be needed to recover a future recurrence after a user stops an alarm from a
+  native notification action without reopening the app.
+- **iOS limitation:** the same alarm plugin can provide the ringing behavior
+  while iOS allows the app/background audio session to run, but iOS cannot
+  guarantee arbitrary code or indefinite alarm audio after the app is force
+  terminated. The plugin's warning/notification behavior is therefore the
+  platform-correct fallback on iOS.
 - Android requires **POST_NOTIFICATIONS** (Android 13+) and
   **SCHEDULE_EXACT_ALARM / Alarms & reminders** access for the precise chain.
   The app requests notification/exact-alarm access at startup. When a user
@@ -91,20 +99,10 @@ flutter test
   exemption prompt; the Alarm tab provides a way to revisit exact-alarm and
   Doze access later. OEM auto-start/battery controls may still need manual
   whitelisting.
-- Android notification IDs in the `1000000 + taskId` namespace are stable per
-  task and separate from the alarm/timer and legacy notification ranges. iOS
-  derives stable slot IDs from a separate `2000000 + taskId * 64 + slot`
-  namespace. Tapping a recurring notification launches directly into that
-  task's edit/details screen, including from a cold start.
-- **iOS equivalent/limitation:** iOS owns local-notification delivery but does
-  not provide an Android-style exact repeating alarm receiver or allow an
-  app to execute arbitrary Dart code after termination. The app therefore
-  schedules a finite five-day horizon (up to 64 two-hour system notifications)
-  with stable task/slot IDs; those pending notifications survive app
-  termination, and opening the app refreshes the horizon. iOS can defer
-  delivery and its system-wide pending-notification limit means this is a
-  best-effort horizon rather than an indefinite guarantee. A server push is
-  required for indefinite reminders without reopening the app.
+- Recurring task alarms use the stable `600000 + taskId` namespace, separate
+  from regular alarm IDs, the timer alarm, and legacy notification ranges.
+  Tapping the full-screen task reminder opens the task's edit/details screen,
+  including from a cold start.
 - Alarms/timers use the [`alarm`](https://pub.dev/packages/alarm) plugin
   (AlarmManager + a foreground service). Exact firing requires the user to
   grant **"Alarms & reminders"** access on Android 12+; the Alarm tab shows

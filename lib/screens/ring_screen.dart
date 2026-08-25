@@ -2,7 +2,12 @@ import 'dart:convert';
 
 import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/todo.dart';
+import '../providers/todo_provider.dart';
 import '../services/alarm_scheduler.dart';
+import '../services/notification_service.dart';
+import '../services/storage_service.dart';
 import '../utils/constants.dart';
 
 /// Full-screen ring screen shown when an alarm or a timer fires.
@@ -14,6 +19,7 @@ import '../utils/constants.dart';
 class RingScreen extends StatefulWidget {
   final AlarmSettings alarmSettings;
   final bool isAlarm;
+  final bool isRecurringReminder;
   final String title;
   final VoidCallback? onClosed;
 
@@ -21,6 +27,7 @@ class RingScreen extends StatefulWidget {
     super.key,
     required this.alarmSettings,
     required this.isAlarm,
+    this.isRecurringReminder = false,
     this.title = '',
     this.onClosed,
   });
@@ -31,6 +38,7 @@ class RingScreen extends StatefulWidget {
 
 class _RingScreenState extends State<RingScreen> {
   Map<String, dynamic>? _payload;
+  bool _actionInProgress = false;
 
   @override
   void initState() {
@@ -55,20 +63,44 @@ class _RingScreenState extends State<RingScreen> {
   String get _ringtone => (_payload?['ring'] as String?) ??
       AlarmRingScheduler.ringtones.first.asset;
 
+  int? get _todoId => (_payload?['id'] as num?)?.toInt();
+
+  String get _notificationBody =>
+      (_payload?['body'] as String?) ?? 'Time to work on this task.';
+
   Future<void> _stop() async {
+    if (_actionInProgress) return;
+    _actionInProgress = true;
+
     await AlarmRingScheduler.stop(widget.alarmSettings.id);
-    _rearmIfDaily();
+    if (widget.isRecurringReminder) {
+      await _rearmRecurringReminder();
+    } else {
+      _rearmIfDaily();
+    }
     widget.onClosed?.call();
     if (mounted) Navigator.of(context).maybePop();
   }
 
   Future<void> _snooze() async {
-    await AlarmRingScheduler.snooze(
-      alarmId: widget.alarmSettings.id,
-      label: _label,
-      ringtone: _ringtone,
-      minutes: 5,
-    );
+    if (_actionInProgress) return;
+    _actionInProgress = true;
+
+    if (widget.isRecurringReminder && _todoId != null) {
+      await AlarmRingScheduler.snoozeRecurringReminder(
+        todoId: _todoId!,
+        title: _label,
+        body: _notificationBody,
+        minutes: 5,
+      );
+    } else {
+      await AlarmRingScheduler.snooze(
+        alarmId: widget.alarmSettings.id,
+        label: _label,
+        ringtone: _ringtone,
+        minutes: 5,
+      );
+    }
     widget.onClosed?.call();
     if (mounted) Navigator.of(context).maybePop();
     if (mounted) {
@@ -79,6 +111,38 @@ class _RingScreenState extends State<RingScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _rearmRecurringReminder() async {
+    final todoId = _todoId;
+    if (todoId == null) return;
+
+    Todo? todo;
+    for (final candidate in context.read<TodoProvider>().allTodos) {
+      if (candidate.id == todoId) {
+        todo = candidate;
+        break;
+      }
+    }
+
+    // The full-screen alarm can be shown before MainShell finishes loading.
+    // Read SQLite directly as a fallback so pressing Stop immediately after a
+    // cold start still preserves the next recurring occurrence.
+    if (todo == null) {
+      try {
+        for (final candidate in await StorageService.getAllTodos()) {
+          if (candidate.id == todoId) {
+            todo = candidate;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Completing, deleting, or turning off the reminder while it was ringing
+    // must win over the generic "schedule the next one" behavior.
+    if (todo == null || todo.isCompleted || todo.reminderTime == null) return;
+    await NotificationService.scheduleRecurringReminder(todo);
   }
 
   /// Daily alarms ring again tomorrow at the same time.
@@ -114,15 +178,25 @@ class _RingScreenState extends State<RingScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                widget.isAlarm ? Icons.alarm_rounded : Icons.timer_rounded,
+                widget.isRecurringReminder
+                    ? Icons.notifications_active_rounded
+                    : widget.isAlarm
+                        ? Icons.alarm_rounded
+                        : Icons.timer_rounded,
                 size: 120,
-                color: widget.isAlarm
-                    ? AppColors.danger
-                    : AppColors.primary,
+                color: widget.isRecurringReminder
+                    ? AppColors.primary
+                    : widget.isAlarm
+                        ? AppColors.danger
+                        : AppColors.primary,
               ),
               const SizedBox(height: 24),
               Text(
-                widget.isAlarm ? '⏰ ALARM' : '⏱️ TIMER FINISHED',
+                widget.isRecurringReminder
+                    ? '📋 TASK REMINDER'
+                    : widget.isAlarm
+                        ? '⏰ ALARM'
+                        : '⏱️ TIMER FINISHED',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 32,

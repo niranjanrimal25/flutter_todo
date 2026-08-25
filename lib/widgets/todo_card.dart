@@ -139,7 +139,7 @@ class TodoCard extends StatelessWidget {
                   ),
                   if (todo.imagePath != null && todo.imagePath!.isNotEmpty) ...[
                     const SizedBox(width: 12),
-                    _buildImageThumbnail(isDark),
+                    _buildImageThumbnail(context, isDark),
                   ],
                   const SizedBox(width: 14),
                   Expanded(
@@ -267,27 +267,89 @@ class TodoCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImageThumbnail(bool isDark) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Image.file(
-        File(todo.imagePath!),
-        width: 56,
-        height: 56,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 56,
-            height: 56,
-            color: AppColors.primary.withValues(alpha: 0.1),
-            child: Icon(
-              Icons.broken_image_outlined,
-              color: isDark ? AppColors.primaryLight : AppColors.primary,
-              size: 24,
-            ),
-          );
-        },
+  Widget _buildImageThumbnail(BuildContext context, bool isDark) {
+    return GestureDetector(
+      onTap: () => _showImagePreview(context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          File(todo.imagePath!),
+          width: 56,
+          height: 56,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              width: 56,
+              height: 56,
+              color: AppColors.primary.withValues(alpha: 0.1),
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: isDark ? AppColors.primaryLight : AppColors.primary,
+                size: 24,
+              ),
+            );
+          },
+        ),
       ),
+    );
+  }
+
+  void _showImagePreview(BuildContext context) {
+    final imagePath = todo.imagePath;
+    if (imagePath == null || imagePath.isEmpty) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(20),
+          child: Stack(
+            alignment: Alignment.topRight,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 4,
+                  child: Image.file(
+                    File(imagePath),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: double.infinity,
+                        height: 260,
+                        decoration: BoxDecoration(
+                          color: AppColors.darkCard,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.white70,
+                          size: 56,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: IconButton(
+                  tooltip: 'Close image preview',
+                  onPressed: () => Navigator.pop(dialogContext),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

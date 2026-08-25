@@ -102,7 +102,7 @@ void main() {
     test('uses a stable notification namespace per task', () {
       expect(
         NotificationService.recurringReminderNotificationId(42),
-        1000042,
+        600042,
       );
       expect(
         NotificationService.recurringReminderNotificationId(42),
