@@ -37,6 +37,11 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   String? _imagePath;
   String? _originalImagePath;
   final List<Subtask> _subtasks = <Subtask>[];
+  final TextEditingController _newSubtaskController =
+      TextEditingController();
+  final TextEditingController _editingSubtaskController =
+      TextEditingController();
+  int? _editingSubtaskIndex;
   bool _didSave = false;
   late Priority _priority;
   late String _category;
@@ -1352,16 +1357,31 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
               return _buildSubtaskRow(index, subtask, isDark);
             }),
           ],
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => _showSubtaskDialog(),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Add subtask'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _newSubtaskController,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _addSubtask(),
+            decoration: InputDecoration(
+              hintText: 'Add a subtask...',
+              prefixIcon: const Icon(
+                Icons.add_task_rounded,
+                color: AppColors.primary,
+              ),
+              suffixIcon: IconButton(
+                tooltip: 'Add subtask',
+                onPressed: _addSubtask,
+                icon: const Icon(
+                  Icons.add_circle_rounded,
+                  color: AppColors.primary,
+                ),
+              ),
+              filled: true,
+              fillColor: isDark ? AppColors.darkSurface : AppColors.background,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
             ),
           ),
@@ -1372,6 +1392,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
 
   Widget _buildSubtaskRow(int index, Subtask subtask, bool isDark) {
     final textColor = isDark ? AppColors.darkTextPrimary : AppColors.textDark;
+    final isEditing = _editingSubtaskIndex == index;
+
     return Row(
       children: [
         Checkbox(
@@ -1386,91 +1408,105 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
           },
         ),
         Expanded(
-          child: InkWell(
-            onTap: () => _showSubtaskDialog(index: index),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                subtask.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: subtask.isCompleted
-                      ? (isDark
-                          ? AppColors.darkTextSecondary
-                          : AppColors.textLight)
-                      : textColor,
-                  fontSize: 14,
-                  decoration: subtask.isCompleted
-                      ? TextDecoration.lineThrough
-                      : null,
+          child: isEditing
+              ? TextField(
+                  controller: _editingSubtaskController,
+                  autofocus: true,
+                  maxLength: 120,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _finishEditingSubtask(),
+                  decoration: const InputDecoration(
+                    hintText: 'Subtask name',
+                    counterText: '',
+                    isDense: true,
+                  ),
+                )
+              : InkWell(
+                  onTap: () => _beginEditingSubtask(index),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      subtask.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: subtask.isCompleted
+                            ? (isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textLight)
+                            : textColor,
+                        fontSize: 14,
+                        decoration: subtask.isCompleted
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+        ),
+        if (isEditing) ...[
+          IconButton(
+            tooltip: 'Save subtask',
+            onPressed: _finishEditingSubtask,
+            icon: const Icon(Icons.check_rounded,
+                color: AppColors.success, size: 20),
           ),
-        ),
-        IconButton(
-          tooltip: 'Delete subtask',
-          onPressed: () => setState(() => _subtasks.removeAt(index)),
-          icon: const Icon(Icons.delete_outline_rounded,
-              color: AppColors.danger, size: 20),
-        ),
+          IconButton(
+            tooltip: 'Cancel editing',
+            onPressed: _cancelEditingSubtask,
+            icon: const Icon(Icons.close_rounded,
+                color: AppColors.textGrey, size: 20),
+          ),
+        ] else ...[
+          IconButton(
+            tooltip: 'Delete subtask',
+            onPressed: () => setState(() => _subtasks.removeAt(index)),
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: AppColors.danger, size: 20),
+          ),
+        ],
       ],
     );
   }
 
-  Future<void> _showSubtaskDialog({int? index}) async {
-    final controller = TextEditingController(
-      text: index == null ? '' : _subtasks[index].title,
-    );
-    final title = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(index == null ? 'Add subtask' : 'Edit subtask'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 120,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              hintText: 'What is the next step?',
-            ),
-            onSubmitted: (value) {
-              if (value.trim().isNotEmpty) {
-                Navigator.pop(dialogContext, value.trim());
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (value.isNotEmpty) {
-                  Navigator.pop(dialogContext, value);
-                }
-              },
-              child: Text(index == null ? 'Add' : 'Save'),
-            ),
-          ],
-        );
-      },
-    );
-    controller.dispose();
+  void _addSubtask() {
+    final title = _newSubtaskController.text.trim();
+    if (title.isEmpty) return;
 
-    if (title == null || !mounted) return;
     setState(() {
-      if (index == null) {
-        _subtasks.add(Subtask(title: title));
-      } else {
-        _subtasks[index] = _subtasks[index].copyWith(title: title);
-      }
+      _subtasks.add(Subtask(title: title));
+      _newSubtaskController.clear();
+    });
+  }
+
+  void _beginEditingSubtask(int index) {
+    setState(() {
+      _editingSubtaskIndex = index;
+      _editingSubtaskController.text = _subtasks[index].title;
+      _editingSubtaskController.selection = TextSelection.collapsed(
+        offset: _editingSubtaskController.text.length,
+      );
+    });
+  }
+
+  void _finishEditingSubtask() {
+    final index = _editingSubtaskIndex;
+    final title = _editingSubtaskController.text.trim();
+    if (index == null || title.isEmpty) return;
+
+    setState(() {
+      _subtasks[index] = _subtasks[index].copyWith(title: title);
+      _editingSubtaskIndex = null;
+      _editingSubtaskController.clear();
+    });
+  }
+
+  void _cancelEditingSubtask() {
+    setState(() {
+      _editingSubtaskIndex = null;
+      _editingSubtaskController.clear();
     });
   }
 
@@ -1867,6 +1903,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     }
     _titleController.dispose();
     _descController.dispose();
+    _newSubtaskController.dispose();
+    _editingSubtaskController.dispose();
     _animController.dispose();
     super.dispose();
   }

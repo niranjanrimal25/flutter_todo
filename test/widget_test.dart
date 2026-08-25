@@ -8,6 +8,7 @@ import 'package:todo_app/models/timer_state.dart';
 import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/providers/todo_provider.dart';
 import 'package:todo_app/services/notification_service.dart';
+import 'package:todo_app/screens/add_edit_todo_screen.dart';
 import 'package:todo_app/utils/constants.dart';
 import 'package:todo_app/widgets/empty_state.dart';
 import 'package:todo_app/widgets/nepali_calendar_widget.dart';
@@ -162,6 +163,27 @@ void main() {
       );
       // Sorting must not mutate the provider's source list.
       expect(todos.first.title, 'Old high');
+    });
+  });
+
+  group('Subtask editor', () {
+    testWidgets('adds and toggles a subtask inline', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: AddEditTodoScreen()),
+      );
+
+      final addField = find.byType(TextField).last;
+      await tester.ensureVisible(addField);
+      await tester.enterText(addField, 'Pack charger');
+      await tester.tap(find.byTooltip('Add subtask'));
+      await tester.pump();
+
+      expect(find.text('Pack charger'), findsOneWidget);
+      expect(find.text('0 of 1 completed'), findsOneWidget);
+
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pump();
+      expect(find.text('1 of 1 completed'), findsOneWidget);
     });
   });
 
