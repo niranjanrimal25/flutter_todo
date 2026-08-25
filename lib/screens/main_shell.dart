@@ -48,7 +48,12 @@ class _MainShellState extends State<MainShell> {
 
     // A notification tap can arrive before the SQLite-backed provider is
     // ready. Try again after loading so cold-start taps open the exact task.
-    NotificationNavigation.tryOpenPendingTodo();
+    // Defer the push until the splash-to-home frame has finished building;
+    // mutating the Navigator during that build can trip Flutter's child/render
+    // object assertion.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) NotificationNavigation.tryOpenPendingTodo();
+    });
   }
 
   @override
