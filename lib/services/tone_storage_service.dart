@@ -44,7 +44,7 @@ class ToneStorageService {
   /// so the app receives a user-selected file reference without requesting
   /// broad storage or microphone permission.
   static Future<AlarmTone?> pickAndStoreTone() async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.audio,
       allowMultiple: false,
       withData: false,
