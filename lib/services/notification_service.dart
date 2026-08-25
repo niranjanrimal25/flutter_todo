@@ -26,7 +26,6 @@ class NotificationService {
   /// collide with either.
   static const int recurringReminderNotificationIdBase =
       AlarmRingScheduler.recurringReminderIdBase;
-  static const Duration recurringReminderInterval = Duration(hours: 2);
   static const MethodChannel _nativeReminderChannel =
       MethodChannel('todo_app/notification');
 
@@ -156,10 +155,10 @@ class NotificationService {
   static int recurringReminderNotificationId(int todoId) =>
       recurringReminderNotificationIdBase + todoId;
 
-  /// Schedules an every-two-hours reminder through the same alarm plugin used
-  /// by regular alarms. It therefore uses the looping ringtone, continuous
-  /// vibration, foreground service, exact AlarmManager schedule, boot restore,
-  /// and full-screen ringing UI instead of a soft notification.
+  /// Schedules a one-to-24-hour recurring reminder through the same alarm
+  /// plugin used by regular alarms. It therefore uses the looping ringtone,
+  /// continuous vibration, foreground service, exact AlarmManager schedule,
+  /// boot restore, and full-screen ringing UI instead of a soft notification.
   static Future<void> scheduleRecurringReminder(Todo todo) async {
     if (todo.id == null || todo.isCompleted || todo.reminderTime == null) {
       debugPrint('Cannot schedule recurring reminder: task is not eligible');
@@ -172,7 +171,8 @@ class NotificationService {
     final now = tz.TZDateTime.now(tz.local);
     final start = todo.dueDate ?? todo.reminderTime!;
     final configuredStart = tz.TZDateTime.from(start, tz.local);
-    final firstAt = _nextRecurringOccurrence(configuredStart, now);
+    final interval = Duration(hours: todo.reminderIntervalHours);
+    final firstAt = _nextRecurringOccurrence(configuredStart, now, interval);
     final body = todo.description.isNotEmpty
         ? todo.description
         : 'Time to work on this task.';
@@ -181,6 +181,7 @@ class NotificationService {
       await AlarmRingScheduler.scheduleRecurringReminder(
         todoId: todo.id!,
         firstAt: firstAt,
+        intervalHours: todo.reminderIntervalHours,
         title: todo.title,
         body: body,
       );
@@ -194,12 +195,13 @@ class NotificationService {
   static tz.TZDateTime _nextRecurringOccurrence(
     tz.TZDateTime start,
     tz.TZDateTime now,
+    Duration interval,
   ) {
     if (start.isAfter(now)) return start;
 
     final elapsed = now.difference(start).inSeconds;
-    final intervals = elapsed ~/ recurringReminderInterval.inSeconds + 1;
-    return start.add(recurringReminderInterval * intervals);
+    final intervals = elapsed ~/ interval.inSeconds + 1;
+    return start.add(interval * intervals);
   }
 
   /// Stops the alarm-plugin occurrence and removes legacy soft-notification

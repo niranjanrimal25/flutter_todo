@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/alarm.dart';
 import '../models/todo.dart';
+import '../providers/alarm_provider.dart';
 import '../providers/todo_provider.dart';
 import '../services/alarm_scheduler.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../utils/constants.dart';
+import '../widgets/app_feedback.dart';
 
 /// Full-screen ring screen shown when an alarm or a timer fires.
 ///
@@ -68,6 +71,11 @@ class _RingScreenState extends State<RingScreen> {
   String get _notificationBody =>
       (_payload?['body'] as String?) ?? 'Time to work on this task.';
 
+  int get _reminderIntervalHours =>
+      (((_payload?['intervalHours'] as num?)?.toInt() ?? 2)
+          .clamp(1, 24)
+          .toInt());
+
   Future<void> _stop() async {
     if (_actionInProgress) return;
     _actionInProgress = true;
@@ -76,7 +84,7 @@ class _RingScreenState extends State<RingScreen> {
     if (widget.isRecurringReminder) {
       await _rearmRecurringReminder();
     } else {
-      _rearmIfDaily();
+      await _rearmRepeatingAlarm();
     }
     widget.onClosed?.call();
     if (mounted) Navigator.of(context).maybePop();
@@ -89,6 +97,7 @@ class _RingScreenState extends State<RingScreen> {
     if (widget.isRecurringReminder && _todoId != null) {
       await AlarmRingScheduler.snoozeRecurringReminder(
         todoId: _todoId!,
+        intervalHours: _reminderIntervalHours,
         title: _label,
         body: _notificationBody,
         minutes: 5,
@@ -99,17 +108,13 @@ class _RingScreenState extends State<RingScreen> {
         label: _label,
         ringtone: _ringtone,
         minutes: 5,
+        payload: widget.alarmSettings.payload,
       );
     }
     widget.onClosed?.call();
     if (mounted) Navigator.of(context).maybePop();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Snoozed for 5 minutes 😴'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      AppFeedback.success(context, 'Snoozed for 5 minutes');
     }
   }
 
@@ -145,21 +150,32 @@ class _RingScreenState extends State<RingScreen> {
     await NotificationService.scheduleRecurringReminder(todo);
   }
 
-  /// Daily alarms ring again tomorrow at the same time.
-  void _rearmIfDaily() {
-    final daily = _payload?['daily'] == true;
-    if (!daily) return;
-    final h = (_payload?['h'] as num?)?.toInt();
-    final m = (_payload?['m'] as num?)?.toInt();
-    if (h == null || m == null) return;
+  Future<void> _rearmRepeatingAlarm() async {
+    final alarmId = (_payload?['id'] as num?)?.toInt();
+    if (alarmId == null) return;
 
-    AlarmRingScheduler.scheduleDaily(
-      alarmDbId: widget.alarmSettings.id,
-      hour: h,
-      minute: m,
-      label: _label,
-      ringtone: _ringtone,
-    );
+    Alarm? alarm;
+    for (final candidate in context.read<AlarmProvider>().alarms) {
+      if (candidate.id == alarmId) {
+        alarm = candidate;
+        break;
+      }
+    }
+
+    // On a cold start the Alarm tab may not have finished its SQLite load yet.
+    if (alarm == null) {
+      try {
+        for (final candidate in await StorageService.getAllAlarms()) {
+          if (candidate.id == alarmId) {
+            alarm = candidate;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (alarm == null) return;
+    await context.read<AlarmProvider>().handleAlarmStopped(alarm);
   }
 
   @override

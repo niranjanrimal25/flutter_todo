@@ -14,6 +14,7 @@ import '../providers/todo_provider.dart';
 import '../services/image_storage_service.dart';
 import '../services/notification_service.dart';
 import '../utils/constants.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/nepali_date_picker_dialog.dart';
 
 enum _DatePickerKind { bs, ad }
@@ -49,6 +50,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   NepaliDateTime? _nepaliDueDate;
   TimeOfDay? _dueTime;
   DateTime? _reminderTime;
+  late int _reminderIntervalHours;
   bool _hasReminder = false;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
@@ -78,6 +80,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     _category = widget.todo?.category ?? 'General';
     _dueDate = widget.todo?.dueDate;
     _reminderTime = widget.todo?.reminderTime;
+    _reminderIntervalHours = widget.todo?.reminderIntervalHours ?? 2;
     _hasReminder = widget.todo?.reminderTime != null;
 
     if (_dueDate != null) {
@@ -400,8 +403,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                           value: _hasReminder,
                           onChanged: (val) {
                             if (val) {
-                              // Enabling starts the two-hour cadence now. A
-                              // task without a due date can still tap the
+                              // Enabling starts the selected cadence now.
+                              // A task without a due date can still tap the
                               // start-time row below to choose another start.
                               setState(() {
                                 _hasReminder = true;
@@ -424,8 +427,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                         alignment: Alignment.centerLeft,
                         child: Text(
                           _dueDate != null
-                              ? 'Every 2 hours, starting at the due time'
-                              : 'Every 2 hours after the reminder start time',
+                              ? 'Every $_reminderIntervalHours ${_reminderIntervalHours == 1 ? 'hour' : 'hours'}, starting at the due time'
+                              : 'Every $_reminderIntervalHours ${_reminderIntervalHours == 1 ? 'hour' : 'hours'} after the reminder start time',
                           style: TextStyle(
                             fontSize: 12,
                             color: isDark
@@ -433,6 +436,33 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                                 : AppColors.textGrey,
                           ),
                         ),
+                      ),
+                    ],
+                    if (_hasReminder) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: _reminderIntervalHours,
+                        decoration: const InputDecoration(
+                          labelText: 'Repeat reminder every',
+                          prefixIcon: Icon(
+                            Icons.schedule_rounded,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        items: List.generate(24, (index) {
+                          final hours = index + 1;
+                          return DropdownMenuItem<int>(
+                            value: hours,
+                            child: Text(
+                              '$hours ${hours == 1 ? 'hour' : 'hours'}',
+                            ),
+                          );
+                        }),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _reminderIntervalHours = value);
+                          }
+                        },
                       ),
                     ],
                     if (_hasReminder &&
@@ -1802,13 +1832,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
 
   void _showImageMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.danger,
-      ),
-    );
+    AppFeedback.error(context, message);
   }
 
   Future<void> _cleanupImagesAfterSave() async {
@@ -1835,6 +1859,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       category: _category,
       dueDate: _dueDate,
       reminderTime: _hasReminder ? _reminderTime : null,
+      reminderIntervalHours: _reminderIntervalHours,
       imagePath: _imagePath,
       subtasks: List<Subtask>.of(_subtasks),
       isCompleted: widget.todo?.isCompleted ?? false,
@@ -1842,9 +1867,6 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     );
 
     final provider = context.read<TodoProvider>();
-    // Capture the messenger before awaiting so we don't use the screen's
-    // context after it has been popped/disposed.
-    final messenger = ScaffoldMessenger.of(context);
 
     try {
       if (_hasReminder) {
@@ -1860,12 +1882,9 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
         await provider.addTodo(todo);
       }
     } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Could not save task. Please try again.'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppFeedback.error(
+        context,
+        'Could not save task. Please try again.',
       );
       return;
     }
@@ -1880,15 +1899,13 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     _didSave = true;
 
     if (!mounted) return;
-    Navigator.pop(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(_isEditing ? 'Task updated! ✅' : 'Task created! 🎉'),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    AppFeedback.success(
+      context,
+      _isEditing
+          ? 'Task updated successfully'
+          : 'Task added successfully',
     );
+    Navigator.pop(context);
   }
 
   @override

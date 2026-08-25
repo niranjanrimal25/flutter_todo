@@ -1,17 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../models/alarm.dart';
+import '../models/alarm_tone.dart';
 import '../models/timer_state.dart';
 import '../providers/alarm_provider.dart';
 import '../services/alarm_scheduler.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import '../services/tone_storage_service.dart';
 import '../utils/constants.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 
 class AlarmTimerScreen extends StatefulWidget {
@@ -24,18 +29,78 @@ class AlarmTimerScreen extends StatefulWidget {
 class _AlarmTimerScreenState extends State<AlarmTimerScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final AudioPlayer _tonePreviewPlayer = AudioPlayer();
+  List<AlarmTone> _customTones = [];
+  String? _previewingTonePath;
+  int _previewToken = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadCustomTones();
     // Alarms are loaded once by MainShell before this screen is shown.
   }
 
   @override
   void dispose() {
+    _previewToken++;
+    unawaited(_tonePreviewPlayer.dispose());
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCustomTones() async {
+    try {
+      final tones = await ToneStorageService.loadCustomTones();
+      if (mounted) setState(() => _customTones = tones);
+    } catch (error) {
+      debugPrint('Custom tone list could not be loaded: $error');
+    }
+  }
+
+  Future<void> _stopTonePreview() async {
+    _previewToken++;
+    await _tonePreviewPlayer.stop();
+    if (mounted) setState(() => _previewingTonePath = null);
+  }
+
+  Future<void> _toggleTonePreview(String tonePath) async {
+    if (_previewingTonePath == tonePath) {
+      await _stopTonePreview();
+      return;
+    }
+
+    final token = ++_previewToken;
+    await _tonePreviewPlayer.stop();
+    if (mounted) setState(() => _previewingTonePath = tonePath);
+
+    try {
+      final source = tonePath.startsWith('assets/')
+          ? AssetSource(tonePath.substring('assets/'.length))
+          : DeviceFileSource(tonePath);
+      await _tonePreviewPlayer.play(source);
+      Future<void>.delayed(const Duration(seconds: 5), () async {
+        if (token != _previewToken) return;
+        await _tonePreviewPlayer.stop();
+        if (mounted && token == _previewToken) {
+          setState(() => _previewingTonePath = null);
+        }
+      });
+    } catch (error) {
+      if (mounted) setState(() => _previewingTonePath = null);
+      debugPrint('Tone preview failed: $error');
+    }
+  }
+
+  String _toneLabel(String tonePath) {
+    for (final tone in AlarmRingScheduler.ringtones) {
+      if (tone.asset == tonePath) return tone.label;
+    }
+    for (final tone in _customTones) {
+      if (tone.path == tonePath) return tone.label;
+    }
+    return 'Custom tone';
   }
 
   @override
@@ -56,9 +121,12 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
       ),
       body: TabBarView(
         controller: _tabController,
-        children: const [
-          _AlarmTab(),
-          _TimerTab(),
+        children: [
+          _AlarmTab(
+            onEdit: (alarm) => _showAddAlarmDialog(alarm: alarm),
+            toneLabel: _toneLabel,
+          ),
+          const _TimerTab(),
         ],
       ),
       floatingActionButton: AnimatedBuilder(
@@ -66,7 +134,7 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
         builder: (context, _) {
           if (_tabController.index != 0) return const SizedBox.shrink();
           return FloatingActionButton.extended(
-            onPressed: () => _showAddAlarmDialog(context),
+            onPressed: _showAddAlarmDialog,
             icon: const Icon(Icons.alarm_add_rounded, size: 24),
             label: const Text('Add Alarm',
                 style: TextStyle(fontWeight: FontWeight.w600)),
@@ -76,104 +144,243 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
     );
   }
 
-  Future<void> _showAddAlarmDialog(BuildContext context) async {
-    final labelController = TextEditingController();
-    TimeOfDay selectedTime = TimeOfDay.now().replacing(
-      hour: TimeOfDay.now().hour + 1 < 24
-          ? TimeOfDay.now().hour + 1
-          : 0,
-      minute: 0,
-    );
-    String selectedRingtone = AlarmRingScheduler.ringtones.first.asset;
+  Future<void> _showAddAlarmDialog({Alarm? alarm}) async {
+    final labelController = TextEditingController(text: alarm?.label ?? '');
+    final now = TimeOfDay.now();
+    TimeOfDay selectedTime = alarm == null
+        ? now.replacing(hour: now.hour + 1 < 24 ? now.hour + 1 : 0, minute: 0)
+        : TimeOfDay(hour: alarm.hour, minute: alarm.minute);
+    String selectedRingtone =
+        alarm?.ringtone ?? AlarmRingScheduler.ringtones.first.asset;
+    AlarmRepeat selectedRepeat = alarm?.repeat ?? AlarmRepeat.once;
+    final selectedDays = <int>{...(alarm?.repeatDays ?? const <int>[])};
+    String? actionMessage;
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final builtInTones = AlarmRingScheduler.ringtones
+                .map((tone) => AlarmTone(label: tone.label, path: tone.asset));
+            final tones = <AlarmTone>[
+              ...builtInTones,
+              ..._customTones,
+            ];
+
             return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.alarm_add_rounded, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Text('New Alarm'),
+                  const Icon(Icons.alarm_add_rounded,
+                      color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(alarm == null ? 'New Alarm' : 'Edit Alarm'),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: labelController,
-                    autofocus: true,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      hintText: 'Label (e.g. Wake up)',
-                      prefixIcon: Icon(Icons.label_rounded,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: labelController,
+                      autofocus: alarm == null,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText: 'Label (e.g. Wake up)',
+                        prefixIcon: Icon(Icons.label_rounded,
+                            color: AppColors.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.access_time_rounded,
                           color: AppColors.primary),
+                      title: Text(
+                        selectedTime.format(context),
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w600),
+                      ),
+                      trailing: const Icon(Icons.edit_rounded,
+                          color: AppColors.primary),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                          builder: (context, child) {
+                            final isDark =
+                                Theme.of(context).brightness == Brightness.dark;
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: isDark
+                                    ? const ColorScheme.dark(
+                                        primary: AppColors.primary)
+                                    : const ColorScheme.light(
+                                        primary: AppColors.primary),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedTime = picked);
+                        }
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading:
-                        const Icon(Icons.access_time_rounded, color: AppColors.primary),
-                    title: Text(
-                      selectedTime.format(context),
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                    trailing: const Icon(Icons.edit_rounded,
-                        color: AppColors.primary),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: selectedTime,
-                        builder: (context, child) {
-                          final isDark =
-                              Theme.of(context).brightness == Brightness.dark;
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: isDark
-                                  ? const ColorScheme.dark(
-                                      primary: AppColors.primary)
-                                  : const ColorScheme.light(
-                                      primary: AppColors.primary),
+                    const SizedBox(height: 4),
+                    DropdownButtonFormField<AlarmRepeat>(
+                      initialValue: selectedRepeat,
+                      decoration: const InputDecoration(
+                        labelText: 'Repeat',
+                        prefixIcon: Icon(Icons.repeat_rounded,
+                            color: AppColors.primary),
+                      ),
+                      items: AlarmRepeat.values
+                          .map(
+                            (repeat) => DropdownMenuItem<AlarmRepeat>(
+                              value: repeat,
+                              child: Text(repeat.label),
                             ),
-                            child: child!,
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() => selectedRepeat = value);
+                        }
+                      },
+                    ),
+                    if (selectedRepeat == AlarmRepeat.custom) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Repeat on',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.textGrey,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: List.generate(7, (index) {
+                          final weekday = index + 1;
+                          return FilterChip(
+                            label: Text(_weekdayShortName(weekday)),
+                            selected: selectedDays.contains(weekday),
+                            selectedColor: AppColors.primary,
+                            checkmarkColor: Colors.white,
+                            labelStyle: TextStyle(
+                              color: selectedDays.contains(weekday)
+                                  ? Colors.white
+                                  : null,
+                              fontSize: 12,
+                            ),
+                            onSelected: (selected) {
+                              setDialogState(() {
+                                if (selected) {
+                                  selectedDays.add(weekday);
+                                } else {
+                                  selectedDays.remove(weekday);
+                                }
+                              });
+                            },
                           );
+                        }),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Alarm tone',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.textGrey,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...tones.map((tone) {
+                      final isSelected = selectedRingtone == tone.path;
+                      final isPlaying = _previewingTonePath == tone.path;
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: IconButton(
+                          tooltip: isPlaying ? 'Stop preview' : 'Preview tone',
+                          onPressed: () async {
+                            setDialogState(() => selectedRingtone = tone.path);
+                            await _toggleTonePreview(tone.path);
+                            if (dialogContext.mounted) setDialogState(() {});
+                          },
+                          icon: Icon(
+                            isPlaying
+                                ? Icons.stop_circle_rounded
+                                : Icons.play_circle_fill_rounded,
+                            color: isPlaying
+                                ? AppColors.danger
+                                : AppColors.primary,
+                          ),
+                        ),
+                        title: Text(tone.label),
+                        subtitle: tone.path.startsWith('assets/')
+                            ? const Text('Built-in tone')
+                            : const Text('Custom tone'),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded,
+                                color: AppColors.success)
+                            : null,
+                        onTap: () async {
+                          setDialogState(() => selectedRingtone = tone.path);
+                          await _toggleTonePreview(tone.path);
+                          if (dialogContext.mounted) setDialogState(() {});
                         },
                       );
-                      if (picked != null) {
-                        setDialogState(() => selectedTime = picked);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 4),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRingtone,
-                    decoration: const InputDecoration(
-                      labelText: 'Ringtone',
-                      prefixIcon: Icon(Icons.music_note_rounded,
+                    }),
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.audio_file_rounded,
                           color: AppColors.primary),
+                      title: const Text('Add custom tone'),
+                      subtitle: const Text('Choose an audio file from storage'),
+                      onTap: () async {
+                        try {
+                          final tone =
+                              await ToneStorageService.pickAndStoreTone();
+                          if (tone == null || !dialogContext.mounted) return;
+                          if (mounted &&
+                              !_customTones.any((item) => item.path == tone.path)) {
+                            setState(() => _customTones.add(tone));
+                          }
+                          setDialogState(() => selectedRingtone = tone.path);
+                          await _toggleTonePreview(tone.path);
+                          if (dialogContext.mounted) setDialogState(() {});
+                        } catch (error) {
+                          debugPrint('Custom tone import failed: $error');
+                          if (dialogContext.mounted) {
+                            AppFeedback.error(
+                              dialogContext,
+                              'Could not import that audio file.',
+                            );
+                          }
+                        }
+                      },
                     ),
-                    items: AlarmRingScheduler.ringtones
-                        .map(
-                          (r) => DropdownMenuItem(
-                            value: r.asset,
-                            child: Text(r.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDialogState(() => selectedRingtone = v);
-                      }
-                    },
-                  ),
-                ],
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -181,21 +388,35 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    final label =
-                        labelController.text.trim().isEmpty
-                            ? 'Alarm'
-                            : labelController.text.trim();
-                    context.read<AlarmProvider>().addAlarm(
-                          Alarm(
+                  onPressed: selectedRepeat == AlarmRepeat.custom &&
+                          selectedDays.isEmpty
+                      ? null
+                      : () async {
+                          final label = labelController.text.trim().isEmpty
+                              ? 'Alarm'
+                              : labelController.text.trim();
+                          final updated = Alarm(
+                            id: alarm?.id,
                             hour: selectedTime.hour,
                             minute: selectedTime.minute,
                             label: label,
+                            isEnabled: alarm?.isEnabled ?? true,
                             ringtone: selectedRingtone,
-                          ),
-                        );
-                    Navigator.pop(dialogContext);
-                  },
+                            repeat: selectedRepeat,
+                            repeatDays: selectedDays.toList(),
+                          );
+                          final provider = context.read<AlarmProvider>();
+                          if (alarm == null) {
+                            await provider.addAlarm(updated);
+                            actionMessage = 'Alarm added successfully';
+                          } else {
+                            await provider.updateAlarm(updated);
+                            actionMessage = 'Alarm updated successfully';
+                          }
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -211,13 +432,29 @@ class _AlarmTimerScreenState extends State<AlarmTimerScreen>
         );
       },
     );
+    await _stopTonePreview();
+    labelController.dispose();
+    if (actionMessage != null && mounted) {
+      AppFeedback.success(context, actionMessage!);
+    }
+  }
+
+  String _weekdayShortName(int weekday) {
+    const names = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return names[weekday - 1];
   }
 }
 
 // ================= Alarm tab =================
 
 class _AlarmTab extends StatefulWidget {
-  const _AlarmTab();
+  final ValueChanged<Alarm> onEdit;
+  final String Function(String path) toneLabel;
+
+  const _AlarmTab({
+    required this.onEdit,
+    required this.toneLabel,
+  });
 
   @override
   State<_AlarmTab> createState() => _AlarmTabState();
@@ -263,6 +500,21 @@ class _AlarmTabState extends State<_AlarmTab> {
       await openAppSettings();
     }
     await _refreshPermissions();
+  }
+
+  Future<void> _toggleAlarm(Alarm alarm, bool enabled) async {
+    await context.read<AlarmProvider>().toggleAlarm(alarm.id!, enabled);
+    if (!mounted) return;
+    AppFeedback.success(
+      context,
+      enabled ? 'Alarm enabled successfully' : 'Alarm disabled successfully',
+    );
+  }
+
+  Future<void> _deleteAlarm(Alarm alarm) async {
+    await context.read<AlarmProvider>().deleteAlarm(alarm.id!);
+    if (!mounted) return;
+    AppFeedback.success(context, 'Alarm deleted successfully');
   }
 
   Widget _permissionTile({
@@ -370,10 +622,10 @@ class _AlarmTabState extends State<_AlarmTab> {
               ...alarms.map((alarm) {
                 return _AlarmCard(
                   alarm: alarm,
-                  onToggle: (enabled) =>
-                      context.read<AlarmProvider>().toggleAlarm(alarm.id!, enabled),
-                  onDelete: () =>
-                      context.read<AlarmProvider>().deleteAlarm(alarm.id!),
+                  onToggle: (enabled) => _toggleAlarm(alarm, enabled),
+                  onEdit: () => widget.onEdit(alarm),
+                  toneLabel: widget.toneLabel,
+                  onDelete: () => _deleteAlarm(alarm),
                 );
               }).toList(),
           ],
@@ -386,11 +638,15 @@ class _AlarmTabState extends State<_AlarmTab> {
 class _AlarmCard extends StatelessWidget {
   final Alarm alarm;
   final ValueChanged<bool> onToggle;
+  final VoidCallback onEdit;
+  final String Function(String path) toneLabel;
   final VoidCallback onDelete;
 
   const _AlarmCard({
     required this.alarm,
     required this.onToggle,
+    required this.onEdit,
+    required this.toneLabel,
     required this.onDelete,
   });
 
@@ -402,9 +658,12 @@ class _AlarmCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
+      child: InkWell(
+        onTap: onEdit,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
           children: [
             Icon(
               alarm.isEnabled
@@ -444,11 +703,20 @@ class _AlarmCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    AlarmRingScheduler.ringtoneLabel(alarm.ringtone),
+                    alarm.repeatLabel,
                     style: TextStyle(
                       fontSize: 11,
                       color: alarm.isEnabled
                           ? AppColors.primary.withValues(alpha: 0.8)
+                          : AppColors.textLight,
+                    ),
+                  ),
+                  Text(
+                    toneLabel(alarm.ringtone),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: alarm.isEnabled
+                          ? AppColors.textGrey
                           : AppColors.textLight,
                     ),
                   ),
@@ -465,7 +733,8 @@ class _AlarmCard extends StatelessWidget {
               icon: const Icon(Icons.delete_outline_rounded,
                   color: AppColors.danger),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -575,9 +844,11 @@ class _TimerTabState extends State<_TimerTab> {
     await AlarmRingScheduler.scheduleTimerEnd(endTime: endTime);
     // Live countdown in the notification — survives closing the app.
     await NotificationService.showTimerRunning(endTime: endTime);
+    if (!mounted) return;
     _startTicker();
     _saveState(endTime: endTime);
     setState(() {});
+    AppFeedback.success(context, 'Timer started successfully');
   }
 
   void _pause() {
@@ -587,6 +858,7 @@ class _TimerTabState extends State<_TimerTab> {
     NotificationService.cancelTimerRunning();
     _saveState(pausedRemaining: _remainingSeconds);
     setState(() {});
+    AppFeedback.success(context, 'Timer paused successfully');
   }
 
   void _reset() {
@@ -596,6 +868,7 @@ class _TimerTabState extends State<_TimerTab> {
     NotificationService.cancelTimerRunning();
     _clearState();
     setState(() => _remainingSeconds = _totalSeconds);
+    AppFeedback.success(context, 'Timer cancelled successfully');
   }
 
   void _finish() {

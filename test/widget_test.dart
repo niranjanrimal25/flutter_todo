@@ -3,10 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 
 import 'package:todo_app/models/alarm.dart';
+import 'package:todo_app/models/alarm_tone.dart';
 import 'package:todo_app/models/subtask.dart';
 import 'package:todo_app/models/timer_state.dart';
 import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/providers/todo_provider.dart';
+import 'package:todo_app/services/alarm_scheduler.dart';
 import 'package:todo_app/services/notification_service.dart';
 import 'package:todo_app/screens/add_edit_todo_screen.dart';
 import 'package:todo_app/utils/constants.dart';
@@ -26,6 +28,7 @@ void main() {
         createdAt: DateTime(2026, 8, 21, 10, 30),
         dueDate: DateTime(2026, 8, 25, 18, 0),
         reminderTime: DateTime(2026, 8, 25, 9, 0),
+        reminderIntervalHours: 5,
         category: 'Shopping',
         imagePath: '/app/documents/todo_images/groceries.jpg',
         subtasks: [
@@ -44,6 +47,7 @@ void main() {
       expect(restored.createdAt, todo.createdAt);
       expect(restored.dueDate, todo.dueDate);
       expect(restored.reminderTime, todo.reminderTime);
+      expect(restored.reminderIntervalHours, 5);
       expect(restored.category, 'Shopping');
       expect(restored.imagePath, '/app/documents/todo_images/groceries.jpg');
       expect(restored.subtasks, hasLength(2));
@@ -62,6 +66,7 @@ void main() {
       expect(restored.reminderTime, isNull);
       expect(restored.isCompleted, isFalse);
       expect(restored.priority, Priority.medium);
+      expect(restored.reminderIntervalHours, 2);
       expect(restored.category, 'General');
       expect(restored.imagePath, isNull);
     });
@@ -196,6 +201,9 @@ void main() {
         label: 'Wake up',
         isEnabled: true,
         ringtone: 'assets/sounds/chime.wav',
+        repeat: AlarmRepeat.custom,
+        repeatDays: [DateTime.monday, DateTime.wednesday, DateTime.friday],
+        nextTriggerAt: DateTime(2026, 8, 24, 6, 30),
       );
 
       final restored = Alarm.fromMap(alarm.toMap());
@@ -206,6 +214,15 @@ void main() {
       expect(restored.label, 'Wake up');
       expect(restored.isEnabled, isTrue);
       expect(restored.ringtone, 'assets/sounds/chime.wav');
+      expect(restored.repeat, AlarmRepeat.custom);
+      expect(restored.repeatDays, [1, 3, 5]);
+      expect(restored.nextTriggerAt, DateTime(2026, 8, 24, 6, 30));
+    });
+
+    test('repeat labels describe each schedule mode', () {
+      expect(AlarmRepeat.once.label, 'Once');
+      expect(AlarmRepeat.everyday.label, 'Everyday');
+      expect(AlarmRepeat.custom.label, 'Custom days');
     });
 
     test('fromMap uses defaults for missing optional fields', () {
@@ -219,6 +236,9 @@ void main() {
       expect(restored.label, 'Alarm');
       expect(restored.isEnabled, isFalse);
       expect(restored.ringtone, 'assets/sounds/alarm.wav');
+      expect(restored.repeat, AlarmRepeat.once);
+      expect(restored.repeatDays, isEmpty);
+      expect(restored.nextTriggerAt, isNull);
     });
 
     test('copyWith overrides only the provided fields', () {
@@ -240,6 +260,52 @@ void main() {
     test('minutesOfDay allows sorting by time of day', () {
       expect(Alarm(hour: 0, minute: 5).minutesOfDay, 5);
       expect(Alarm(hour: 23, minute: 59).minutesOfDay, 1439);
+    });
+  });
+
+  group('Alarm tones', () {
+    test('stores a stable custom tone reference', () {
+      const tone = AlarmTone(label: 'My chime', path: '/documents/my-chime.wav');
+      final restored = AlarmTone.fromMap(tone.toMap());
+
+      expect(restored.label, 'My chime');
+      expect(restored.path, '/documents/my-chime.wav');
+    });
+  });
+
+  group('Alarm scheduling', () {
+    test('finds the next custom weekday occurrence', () {
+      final alarm = Alarm(
+        id: 10,
+        hour: 9,
+        minute: 0,
+        repeat: AlarmRepeat.custom,
+        repeatDays: [DateTime.monday, DateTime.friday],
+      );
+      final now = DateTime(2026, 8, 25, 10); // Tuesday
+
+      expect(
+        AlarmRingScheduler.nextAlarmOccurrence(alarm, now: now),
+        DateTime(2026, 8, 28, 9),
+      );
+    });
+
+    test('once alarms use their persisted future occurrence', () {
+      final next = DateTime(2026, 8, 26, 8);
+      final alarm = Alarm(
+        id: 11,
+        hour: 7,
+        minute: 0,
+        nextTriggerAt: next,
+      );
+
+      expect(
+        AlarmRingScheduler.nextAlarmOccurrence(
+          alarm,
+          now: DateTime(2026, 8, 25, 10),
+        ),
+        next,
+      );
     });
   });
 

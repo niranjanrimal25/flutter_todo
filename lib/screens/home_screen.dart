@@ -7,6 +7,7 @@ import '../providers/todo_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/todo_card.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/nepali_calendar_widget.dart';
 import 'add_edit_todo_screen.dart';
@@ -385,7 +386,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       duration: Duration(milliseconds: 300 + (index * 50)),
                       child: TodoCard(
                         todo: todo,
-                        onToggle: () => provider.toggleTodo(todo.id!),
+                        onToggle: () => _toggleTodo(todo),
                         onEdit: () => _navigateToAddEdit(context, todo: todo),
                         onDelete: () => _showDeleteDialog(context, todo.id!),
                       ),
@@ -396,6 +397,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _toggleTodo(Todo todo) async {
+    final provider = context.read<TodoProvider>();
+    await provider.toggleTodo(todo.id!);
+    if (!mounted) return;
+
+    AppFeedback.success(
+      context,
+      todo.isCompleted
+          ? 'Task marked as incomplete'
+          : 'Task marked as complete',
     );
   }
 
@@ -437,18 +451,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              context.read<TodoProvider>().deleteTodo(id);
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Task deleted'),
-                  backgroundColor: AppColors.danger,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              );
+              await context.read<TodoProvider>().deleteTodo(id);
+              if (!mounted) return;
+              AppFeedback.success(context, 'Task deleted successfully');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.danger,

@@ -7,9 +7,11 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - ✅ Create, edit, delete, and complete tasks
 - 🖼️ Optional task image attachments from the camera or gallery, with preview, replace, remove, and persistent local storage
 - ☑️ Subtasks / checklists with add, edit, delete, completion toggles, and progress tracking
+- 🎵 Built-in and custom alarm tones with five-second previews and persistent device-file imports
 - 🚀 Native `flutter_native_splash` launch screen followed by an animated branded loading screen while local data loads
-- 🔔 **Recurring task reminders** — optional per-task ON/OFF reminders every two hours, with due-time anchoring, stable notification IDs, reboot/process-death recovery, and notification deep links back to the task
-- ⏰ **Alarm section** — set daily repeating alarms with labels and a **custom ringtone** (Classic Beep / Chime / Siren); they **ring exactly on time** — looping sound + continuous vibration from a foreground service, full-screen alert over the lock screen, Stop/Snooze on the notification and the ring screen — even when the app is killed or the phone was rebooted (alarms reschedule automatically at boot)
+- ✅ Reusable in-app SnackBar confirmations for task, alarm, and timer actions
+- 🔔 **Recurring task reminders** — optional per-task ON/OFF reminders every 1–24 hours, with due-time anchoring, stable notification IDs, reboot/process-death recovery, and notification deep links back to the task
+- ⏰ **Alarm section** — set one-time, everyday, or custom day-wise alarms with labels and bundled/custom tones; they **ring exactly on time** — looping sound + continuous vibration from a foreground service, full-screen alert over the lock screen, Stop/Snooze on the notification and the ring screen — even when the app is killed or the phone was rebooted (alarms reschedule automatically at boot)
 - ⏱️ **Timer section** — countdown timer with presets (up to 2 hours) plus a **custom hours/minutes** option; a **live countdown stays in the notification** when the app is closed, and it **rings** the same way as an alarm when finished
 - 📅 **Nepali (Bikram Sambat) calendar** — pick due dates with the Nepali date picker
 - 🇳🇵 Nepali dates shown in Devanagari digits and month names
@@ -68,19 +70,34 @@ flutter test
   for broad storage access. Camera and photo usage descriptions are declared
   in the platform manifests.
 - A task's nullable `reminderTime` is its Reminder ON/OFF state. While it is
-  on, the recurring reminder runs every two hours. If the task has a due date
-  and time, that is the cadence anchor; otherwise the selected reminder start
-  time is used. Editing the task re-arms the schedule, while completing,
-  deleting, or turning the toggle off cancels it.
+  on, `reminderIntervalHours` controls a one-to-24-hour cadence. If the task
+  has a due date and time, that is the first cadence anchor; otherwise the
+  reminder start time is used. Editing the task re-arms the schedule, while
+  completing, deleting, or turning the toggle off cancels it.
+- Alarms store `AlarmRepeat.once`, `AlarmRepeat.everyday`, or
+  `AlarmRepeat.custom` plus ISO weekdays (Monday = 1 through Sunday = 7).
+  Repeating alarms are re-scheduled from the ring screen and repaired from
+  SQLite at app startup; one-time alarms persist their next occurrence and
+  are consumed after they ring.
+- Alarm tones are previewed with `audioplayers` and imported audio files are
+  copied to the app's documents directory by `ToneStorageService`. The alarm
+  stores the resulting path, so the alarm plugin can play a custom tone from
+  native code even when Flutter is not running. File/document pickers use
+  user-selected file access and do not require broad storage permission; the
+  audio file itself is validated and copied into app storage.
+- `AppFeedback` is the shared short-lived in-app SnackBar helper. CRUD and
+  timer messages use it; these confirmations are deliberately not system
+  notifications.
 - **Android recurring reminders use the same `alarm` plugin path as alarms.**
   Each task reminder is an `AlarmSettings` entry backed by the plugin's exact
   `AlarmManager` schedule and foreground service, with the same bundled
   looping ringtone, repeating vibration, full-screen intent, Stop button, and
   Snooze button. The plugin owns the native schedule, so it continues through
   Flutter process death and restores pending schedules after boot. The app
-  re-arms the next two-hour occurrence after Stop when the task is still
-  pending and its reminder is still enabled. If exact-alarm special access is
-  denied, the plugin falls back to its allow-while-idle inexact path.
+  re-arms the next occurrence using the task's selected interval when the
+  task is still pending and its reminder is still enabled. If exact-alarm
+  special access is denied, the plugin falls back to its allow-while-idle
+  inexact path.
 - This is intentionally not a basic `flutter_local_notifications` call: that
   API is still used for soft reminders and the timer chronometer, but task
   reminders go through `AlarmRingScheduler` so they do not auto-dismiss or

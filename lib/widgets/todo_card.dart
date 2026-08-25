@@ -238,7 +238,7 @@ class TodoCard extends StatelessWidget {
                             if (todo.reminderTime != null)
                               _buildChip(
                                 icon: Icons.notifications_active_rounded,
-                                label: 'Every 2h',
+                                label: 'Every ${todo.reminderIntervalHours}h',
                                 color: AppColors.primary,
                               ),
                             _buildChip(

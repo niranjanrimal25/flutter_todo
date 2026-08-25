@@ -13,10 +13,13 @@ class Todo {
   Priority priority;
   DateTime createdAt;
   DateTime? dueDate;
-  /// Null means the recurring two-hour reminder is OFF. When non-null it
-  /// stores the user-selected start time (the due date/time takes precedence
-  /// as the cadence anchor when present).
+  /// Null means the recurring reminder is OFF. When non-null it stores the
+  /// user-selected start time (the due date/time takes precedence as the
+  /// cadence anchor when present).
   DateTime? reminderTime;
+  /// Repeat interval for an enabled reminder, clamped to the supported range
+  /// of one through 24 hours. Existing tasks default to two hours.
+  int reminderIntervalHours;
   String category;
   /// Absolute path to the task's locally copied image, when attached.
   String? imagePath;
@@ -31,10 +34,12 @@ class Todo {
     DateTime? createdAt,
     this.dueDate,
     this.reminderTime,
+    int reminderIntervalHours = 2,
     this.category = 'General',
     this.imagePath,
     List<Subtask>? subtasks,
-  })  : subtasks = List<Subtask>.of(subtasks ?? const <Subtask>[]),
+  })  : reminderIntervalHours = reminderIntervalHours.clamp(1, 24).toInt(),
+        subtasks = List<Subtask>.of(subtasks ?? const <Subtask>[]),
         createdAt = createdAt ?? DateTime.now();
 
   bool get hasSubtasks => subtasks.isNotEmpty;
@@ -56,6 +61,7 @@ class Todo {
       'createdAt': createdAt.toIso8601String(),
       'dueDate': dueDate?.toIso8601String(),
       'reminderTime': reminderTime?.toIso8601String(),
+      'reminderIntervalHours': reminderIntervalHours,
       'category': category,
       'imagePath': imagePath,
       'subtasks': jsonEncode(
@@ -95,6 +101,8 @@ class Todo {
       reminderTime: map['reminderTime'] != null
           ? DateTime.parse(map['reminderTime'] as String)
           : null,
+      reminderIntervalHours:
+          (map['reminderIntervalHours'] as num?)?.toInt() ?? 2,
       category: (map['category'] as String?) ?? 'General',
       imagePath: map['imagePath'] as String?,
       subtasks: _subtasksFromStorage(map['subtasks']),
@@ -110,6 +118,7 @@ class Todo {
     DateTime? createdAt,
     DateTime? dueDate,
     DateTime? reminderTime,
+    int? reminderIntervalHours,
     String? category,
     Object? imagePath = _imagePathUnset,
     List<Subtask>? subtasks,
@@ -123,6 +132,8 @@ class Todo {
       createdAt: createdAt ?? this.createdAt,
       dueDate: dueDate ?? this.dueDate,
       reminderTime: reminderTime ?? this.reminderTime,
+      reminderIntervalHours:
+          reminderIntervalHours ?? this.reminderIntervalHours,
       category: category ?? this.category,
       imagePath: identical(imagePath, _imagePathUnset)
           ? this.imagePath
