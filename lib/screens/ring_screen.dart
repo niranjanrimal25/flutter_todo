@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:alarm/alarm.dart';
+import 'package:alarm/alarm.dart' as alarm_plugin;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/alarm.dart';
@@ -20,7 +20,7 @@ import '../widgets/app_feedback.dart';
 /// screen (or the whole app) is dismissed without pressing Stop. This screen
 /// only gives the user the controls: Stop (with daily re-arm) and Snooze.
 class RingScreen extends StatefulWidget {
-  final AlarmSettings alarmSettings;
+  final alarm_plugin.AlarmSettings alarmSettings;
   final bool isAlarm;
   final bool isRecurringReminder;
   final String title;

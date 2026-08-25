@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:alarm/alarm.dart';
+import 'package:alarm/alarm.dart' as alarm_plugin;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -44,7 +44,7 @@ class AlarmRingScheduler {
   /// Must be called once before any alarm is set (see main()).
   static Future<void> init() async {
     try {
-      await Alarm.init();
+      await alarm_plugin.Alarm.init();
     } catch (e) {
       debugPrint('⚠️ Alarm.init failed: $e');
     }
@@ -193,7 +193,7 @@ class AlarmRingScheduler {
     required int minutes,
     String? payload,
   }) async {
-    await Alarm.stop(alarmId);
+    await alarm_plugin.Alarm.stop(alarmId);
     final alarmPayload = payload ??
         jsonEncode({
           't': 'a',
@@ -225,7 +225,7 @@ class AlarmRingScheduler {
     required int minutes,
   }) async {
     final id = recurringReminderId(todoId);
-    await Alarm.stop(id);
+    await alarm_plugin.Alarm.stop(id);
     final payload = jsonEncode({
       't': 'r',
       'id': todoId,
@@ -249,7 +249,7 @@ class AlarmRingScheduler {
 
   static Future<void> stop(int id) async {
     try {
-      await Alarm.stop(id);
+      await alarm_plugin.Alarm.stop(id);
     } catch (e) {
       debugPrint('⚠️ Alarm.stop($id) failed: $e');
     }
@@ -270,8 +270,8 @@ class AlarmRingScheduler {
   }) async {
     try {
       final playableRingtone = await _prepareRingtonePath(ringtone);
-      await Alarm.set(
-        alarmSettings: AlarmSettings(
+      await alarm_plugin.Alarm.set(
+        alarmSettings: alarm_plugin.AlarmSettings(
           id: id,
           dateTime: dateTime,
           assetAudioPath: playableRingtone,
@@ -289,12 +289,12 @@ class AlarmRingScheduler {
           allowAlarmOverlap: allowAlarmOverlap,
           allowSameSecondScheduling: allowSameSecondScheduling,
           // Gentle 5-second volume fade instead of an abrupt blare.
-          volumeSettings: VolumeSettings.fade(
+          volumeSettings: alarm_plugin.VolumeSettings.fade(
             volume: 0.9,
             fadeDuration: const Duration(seconds: 5),
           ),
           payload: payload,
-          notificationSettings: NotificationSettings(
+          notificationSettings: alarm_plugin.NotificationSettings(
             title: '⏰ $label',
             body: notificationBody,
             stopButton: 'Stop',
