@@ -304,9 +304,12 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                   Expanded(
                     child: _buildDateTimeCard(
                       icon: Icons.calendar_today_rounded,
-                      label: _nepaliDueDate != null
-                          ? NepaliDatePickerHelper.formatNepaliDate(_nepaliDueDate!)
-                          : 'मिति छान्नुहोस्',
+                      // Keep the task form's field labels and values in the
+                      // same English UI language. The Nepali calendar picker
+                      // remains available when choosing the date.
+                      label: _dueDate != null
+                          ? DateFormat('MMM dd, yyyy').format(_dueDate!)
+                          : 'Select Date',
                       onTap: _pickDate,
                       hasValue: _dueDate != null,
                       isDark: isDark,

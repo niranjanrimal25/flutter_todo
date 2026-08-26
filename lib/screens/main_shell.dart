@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/todo_provider.dart';
@@ -66,22 +68,26 @@ class _MainShellState extends State<MainShell> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        IgnorePointer(
-          ignoring: _loaded,
-          child: AnimatedOpacity(
-            opacity: _loaded ? 0 : 1,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-            child: const _AnimatedAppSplash(),
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: _loaded,
+            child: AnimatedOpacity(
+              opacity: _loaded ? 0 : 1,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOut,
+              child: const _AnimatedAppSplash(),
+            ),
           ),
         ),
-        IgnorePointer(
-          ignoring: !_loaded,
-          child: AnimatedOpacity(
-            opacity: _loaded ? 1 : 0,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeIn,
-            child: _buildMain(context),
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: !_loaded,
+            child: AnimatedOpacity(
+              opacity: _loaded ? 1 : 0,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeIn,
+              child: _buildMain(context),
+            ),
           ),
         ),
       ],
@@ -91,40 +97,50 @@ class _MainShellState extends State<MainShell> {
   Widget _buildMain(BuildContext context) {
     return Scaffold(
       key: const ValueKey('main-shell'),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: const [
-          HomeScreen(),
-          AlarmTimerScreen(),
-        ],
+      // Clip nested screen content so a child FAB/list can never paint into
+      // the single bottom navigation region owned by this shell.
+      body: ClipRect(
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: const [
+            HomeScreen(),
+            AlarmTimerScreen(),
+          ],
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _selectedIndex = index),
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        indicatorColor: Colors.transparent,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.checklist_rounded),
-            selectedIcon:
-                Icon(Icons.checklist_rounded, color: AppColors.primary),
-            label: 'Tasks',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.alarm_rounded),
-            selectedIcon:
-                Icon(Icons.alarm_rounded, color: AppColors.primary),
-            label: 'Alarm & Timer',
-          ),
-        ],
+      // This is the only NavigationBar in the app. The child screens provide
+      // their own content/FABs but never create another bottom navigation bar.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: NavigationBar(
+          height: 68,
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) =>
+              setState(() => _selectedIndex = index),
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          indicatorColor: Colors.transparent,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.checklist_rounded),
+              selectedIcon:
+                  Icon(Icons.checklist_rounded, color: AppColors.primary),
+              label: 'Tasks',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.alarm_rounded),
+              selectedIcon:
+                  Icon(Icons.alarm_rounded, color: AppColors.primary),
+              label: 'Alarm & Timer',
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Branded splash with a soft intro animation (logo pops in, text fades in,
-/// gentle pulsing ring) that cross-fades into the app when loading finishes.
+/// Flutter-stage loading screen shown after the native splash and while
+/// SQLite data is being restored.
 class _AnimatedAppSplash extends StatefulWidget {
   const _AnimatedAppSplash();
 
@@ -133,11 +149,15 @@ class _AnimatedAppSplash extends StatefulWidget {
 }
 
 class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
   )..forward();
+  late final AnimationController _spinnerController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat();
 
   late final Animation<double> _logoScale = CurvedAnimation(
     parent: _controller,
@@ -155,14 +175,14 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
   @override
   void dispose() {
     _controller.dispose();
+    _spinnerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: const ValueKey('splash'),
-      body: Container(
+    return SizedBox.expand(
+      child: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [AppColors.primary, Color(0xFF8B83FF)],
@@ -171,83 +191,128 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
           ),
         ),
         child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Pulsing soft ring behind the logo.
-              SizedBox(
-                width: 180,
-                height: 180,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    _PulseRing(duration: const Duration(milliseconds: 1800)),
-                    ScaleTransition(
-                      scale: _logoScale,
-                      child: Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(26),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
+          child: Center(
+            child: SingleChildScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 180,
+                    height: 180,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        _PulseRing(
+                          duration: const Duration(milliseconds: 1800),
+                        ),
+                        ScaleTransition(
+                          scale: _logoScale,
+                          child: Container(
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(26),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
-                          ],
+                            child: const Icon(
+                              Icons.checklist_rounded,
+                              color: AppColors.primary,
+                              size: 58,
+                            ),
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.checklist_rounded,
-                          color: AppColors.primary,
-                          size: 58,
-                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  FadeTransition(
+                    opacity: _textFade,
+                    child: const Text(
+                      'Niranjan Todo',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-              FadeTransition(
-                opacity: _textFade,
-                child: const Text(
-                  'Niranjan Todo',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              FadeTransition(
-                opacity: _subtitleFade,
-                child: Text(
-                  'Tasks  •  Alarms  •  Timer',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 15,
-                    letterSpacing: 1.2,
+                  const SizedBox(height: 10),
+                  FadeTransition(
+                    opacity: _subtitleFade,
+                    child: Text(
+                      'Tasks  •  Alarms  •  Timer',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 15,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 48),
+                  AnimatedBuilder(
+                    animation: _spinnerController,
+                    builder: (context, _) {
+                      return CustomPaint(
+                        size: const Size.square(34),
+                        painter: _LoadingArcPainter(_spinnerController.value),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 48),
-              const SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+class _LoadingArcPainter extends CustomPainter {
+  final double progress;
+
+  const _LoadingArcPainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2 - 2;
+    final trackPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    final arcPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, trackPaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2 + progress * math.pi * 2,
+      math.pi * 1.15,
+      false,
+      arcPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LoadingArcPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
 class _PulseRing extends StatefulWidget {
