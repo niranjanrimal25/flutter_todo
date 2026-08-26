@@ -30,6 +30,8 @@ class MainActivity : FlutterActivity() {
                         val title = arguments?.get("title") as? String
                         val body = arguments?.get("body") as? String
                         val firstAt = (arguments?.get("firstAtMillis") as? Number)?.toLong()
+                        val intervalHours =
+                            (arguments?.get("intervalHours") as? Number)?.toInt() ?: 2
 
                         if (taskId == null || title == null || body == null || firstAt == null) {
                             result.error("invalid_arguments", "Missing reminder arguments", null)
@@ -40,6 +42,7 @@ class MainActivity : FlutterActivity() {
                                 title = title,
                                 body = body,
                                 firstAtMillis = firstAt,
+                                intervalHours = intervalHours,
                             )
                             result.success(null)
                         }

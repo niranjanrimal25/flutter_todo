@@ -1,34 +1,37 @@
 package com.example.todo_app
 
 import android.app.AlarmManager
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.gdelataillade.alarm.alarm.AlarmReceiver
+import com.gdelataillade.alarm.models.AlarmSettings
+import com.gdelataillade.alarm.models.NotificationSettings
+import com.gdelataillade.alarm.models.VolumeSettings
+import com.gdelataillade.alarm.services.AlarmScheduler
+import com.gdelataillade.alarm.services.AlarmStorage
+import java.util.Date
 
 /**
- * Native Android scheduler for recurring task reminders.
+ * Native Android recurrence companion for task reminders.
  *
- * A repeating AlarmManager alarm is tempting, but Android may batch repeating
- * alarms and there is no Dart isolate involved when the process is dead. This
- * receiver instead schedules one exact alarm at a time. When it fires it posts
- * the notification and schedules the next occurrence. The small preference
- * record is enough for the receiver to continue without Flutter and to rebuild
- * the alarms after BOOT_COMPLETED.
+ * The alarm plugin owns each actual ringing alarm: its AlarmReceiver starts
+ * the plugin foreground service, which plays the looping alarm asset,
+ * vibrates, shows the full-screen UI, and exposes Stop/Snooze. This receiver
+ * only wakes at the same time to arm the next occurrence with the plugin's
+ * own AlarmScheduler. Each occurrence uses a different plugin id so stopping
+ * the currently ringing alarm never deletes the next one.
  */
 class RecurringReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val appContext = context.applicationContext
         when (intent.action) {
-            ACTION_FIRE -> {
-                val taskId = intent.getIntExtra(EXTRA_TASK_ID, INVALID_TASK_ID)
-                if (taskId != INVALID_TASK_ID) {
-                    fireReminder(appContext, taskId)
-                }
+            ACTION_CHAIN -> {
+                val taskId = intent.getIntExtra(EXTRA_TASK_ID, INVALID_ID)
+                if (taskId != INVALID_ID) fireAndScheduleNext(appContext, taskId)
             }
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
@@ -38,23 +41,38 @@ class RecurringReminderReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        const val CHANNEL_ID = "todo_recurring_reminders"
-        const val ACTION_FIRE = "com.example.todo_app.action.RECURRING_REMINDER"
+        const val ACTION_CHAIN = "com.example.todo_app.action.RECURRING_REMINDER"
         const val EXTRA_TASK_ID = "extra_task_id"
 
         private const val PREFS_NAME = "recurring_task_reminders"
         private const val KEY_TASK_IDS = "task_ids"
         private const val KEY_ENABLED_PREFIX = "enabled_"
         private const val KEY_NEXT_AT_PREFIX = "next_at_"
+        private const val KEY_INTERVAL_PREFIX = "interval_"
         private const val KEY_TITLE_PREFIX = "title_"
         private const val KEY_BODY_PREFIX = "body_"
-        private const val INVALID_TASK_ID = -1
-        private const val TWO_HOURS_MILLIS = 2L * 60L * 60L * 1000L
-        private const val NOTIFICATION_ID_BASE = 1000000
-        private const val PENDING_INTENT_BASE = 2000000
+        private const val KEY_ACTIVE_PLUGIN_PREFIX = "active_plugin_"
+        private const val KEY_PREVIOUS_PLUGIN_PREFIX = "previous_plugin_"
+        private const val KEY_SEQUENCE_PREFIX = "sequence_"
+        private const val INVALID_ID = -1
+        private const val DEFAULT_INTERVAL_HOURS = 2
+        // AlarmScheduler.requireDurable rejects delays <= 5 seconds because
+        // it would otherwise fall back to an in-process Handler. Keep the
+        // first native plugin alarm just beyond that threshold.
+        private const val MINIMUM_DELAY_MILLIS = 6000L
+        private const val PLUGIN_ALARM_ID_BASE = 600000
+        private const val PLUGIN_ID_STRIDE = 100
+        private const val COMPANION_REQUEST_CODE_BASE = 2100000
+        private const val LEGACY_NOTIFICATION_ID_BASE = 1000000
+        private const val LEGACY_COMPANION_REQUEST_CODE_BASE = 1400000
+        private const val NO_PLUGIN_ID = -1
 
-        /** Stable namespace, separate from alarms, timers, and legacy IDs. */
-        fun notificationId(taskId: Int): Int = NOTIFICATION_ID_BASE + taskId
+        fun pluginAlarmId(taskId: Int): Int = PLUGIN_ALARM_ID_BASE + taskId
+
+        private fun occurrencePluginId(taskId: Int, sequence: Int): Int {
+            return PLUGIN_ALARM_ID_BASE + taskId * PLUGIN_ID_STRIDE +
+                sequence % PLUGIN_ID_STRIDE
+        }
 
         fun schedule(
             context: Context,
@@ -62,34 +80,48 @@ class RecurringReminderReceiver : BroadcastReceiver() {
             title: String,
             body: String,
             firstAtMillis: Long,
+            intervalHours: Int,
         ) {
             val appContext = context.applicationContext
-            val prefs = preferences(appContext)
-            cancelAlarm(appContext, taskId)
-
+            val safeInterval = intervalHours.coerceIn(1, 24)
             val firstAt = firstAtMillis.coerceAtLeast(
                 System.currentTimeMillis() + MINIMUM_DELAY_MILLIS,
             )
+            val prefs = preferences(appContext)
+
+            cancelStoredAlarms(appContext, taskId, prefs)
+
             val ids = taskIds(prefs)
             ids.add(taskId.toString())
+            val firstPluginId = occurrencePluginId(taskId, 0)
             prefs.edit()
                 .putStringSet(KEY_TASK_IDS, ids)
                 .putBoolean(enabledKey(taskId), true)
                 .putLong(nextAtKey(taskId), firstAt)
+                .putInt(intervalKey(taskId), safeInterval)
                 .putString(titleKey(taskId), title)
                 .putString(bodyKey(taskId), body)
+                .putInt(activePluginKey(taskId), firstPluginId)
+                .putInt(previousPluginKey(taskId), NO_PLUGIN_ID)
+                .putInt(sequenceKey(taskId), 0)
                 .commit()
 
-            createChannel(appContext)
-            scheduleAlarm(appContext, taskId, firstAt)
+            schedulePluginAlarm(
+                appContext,
+                taskId,
+                title,
+                body,
+                firstAt,
+                safeInterval,
+                firstPluginId,
+            )
+            scheduleCompanionAlarm(appContext, taskId, firstAt)
         }
 
         fun cancel(context: Context, taskId: Int) {
             val appContext = context.applicationContext
             val prefs = preferences(appContext)
-            cancelAlarm(appContext, taskId)
-            appContext.getSystemService(NotificationManager::class.java)
-                ?.cancel(notificationId(taskId))
+            cancelStoredAlarms(appContext, taskId, prefs)
 
             val ids = taskIds(prefs)
             ids.remove(taskId.toString())
@@ -97,8 +129,12 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 .putStringSet(KEY_TASK_IDS, ids)
                 .remove(enabledKey(taskId))
                 .remove(nextAtKey(taskId))
+                .remove(intervalKey(taskId))
                 .remove(titleKey(taskId))
                 .remove(bodyKey(taskId))
+                .remove(activePluginKey(taskId))
+                .remove(previousPluginKey(taskId))
+                .remove(sequenceKey(taskId))
                 .commit()
         }
 
@@ -111,139 +147,236 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 val taskId = taskIdString.toIntOrNull() ?: continue
                 if (!prefs.getBoolean(enabledKey(taskId), false)) continue
 
-                var nextAt = prefs.getLong(nextAtKey(taskId), now + TWO_HOURS_MILLIS)
-                // If the device was off when one or more occurrences passed,
-                // skip missed alerts but retain the two-hour cadence.
-                while (nextAt <= now) nextAt += TWO_HOURS_MILLIS
+                val intervalHours = prefs.getInt(
+                    intervalKey(taskId),
+                    DEFAULT_INTERVAL_HOURS,
+                ).coerceIn(1, 24)
+                var nextAt = prefs.getLong(
+                    nextAtKey(taskId),
+                    now + intervalHours * HOUR_MILLIS,
+                )
+                while (nextAt <= now) nextAt += intervalHours * HOUR_MILLIS
+
+                val activePluginId = prefs.getInt(
+                    activePluginKey(taskId),
+                    occurrencePluginId(taskId, 0),
+                )
                 prefs.edit().putLong(nextAtKey(taskId), nextAt).commit()
-                scheduleAlarm(appContext, taskId, nextAt)
+
+                val title = prefs.getString(titleKey(taskId), "Task reminder")
+                    ?: "Task reminder"
+                val body = prefs.getString(bodyKey(taskId), "Time to work on this task.")
+                    ?: "Time to work on this task."
+                schedulePluginAlarm(
+                    appContext,
+                    taskId,
+                    title,
+                    body,
+                    nextAt,
+                    intervalHours,
+                    activePluginId,
+                )
+                scheduleCompanionAlarm(appContext, taskId, nextAt)
             }
         }
 
-        private fun fireReminder(context: Context, taskId: Int) {
+        private fun fireAndScheduleNext(context: Context, taskId: Int) {
             val prefs = preferences(context)
             if (!prefs.getBoolean(enabledKey(taskId), false)) return
+
+            val intervalHours = prefs.getInt(
+                intervalKey(taskId),
+                DEFAULT_INTERVAL_HOURS,
+            ).coerceIn(1, 24)
+            val intervalMillis = intervalHours * HOUR_MILLIS
+            val now = System.currentTimeMillis()
+            var nextAt = prefs.getLong(nextAtKey(taskId), now)
+            do {
+                nextAt += intervalMillis
+            } while (nextAt <= now)
+
+            val currentPluginId = prefs.getInt(
+                activePluginKey(taskId),
+                occurrencePluginId(taskId, 0),
+            )
+            val sequence = prefs.getInt(sequenceKey(taskId), 0) + 1
+            val nextPluginId = occurrencePluginId(taskId, sequence)
+            if (!prefs.getBoolean(enabledKey(taskId), false)) return
+
+            prefs.edit()
+                .putLong(nextAtKey(taskId), nextAt)
+                .putInt(previousPluginKey(taskId), currentPluginId)
+                .putInt(activePluginKey(taskId), nextPluginId)
+                .putInt(sequenceKey(taskId), sequence)
+                .commit()
 
             val title = prefs.getString(titleKey(taskId), "Task reminder")
                 ?: "Task reminder"
             val body = prefs.getString(bodyKey(taskId), "Time to work on this task.")
                 ?: "Time to work on this task."
-
-            showNotification(context, taskId, title, body)
-
-            val now = System.currentTimeMillis()
-            var nextAt = prefs.getLong(nextAtKey(taskId), now)
-            do {
-                nextAt += TWO_HOURS_MILLIS
-            } while (nextAt <= now)
-            prefs.edit().putLong(nextAtKey(taskId), nextAt).commit()
-            scheduleAlarm(context, taskId, nextAt)
+            schedulePluginAlarm(
+                context,
+                taskId,
+                title,
+                body,
+                nextAt,
+                intervalHours,
+                nextPluginId,
+            )
+            scheduleCompanionAlarm(context, taskId, nextAt)
         }
 
-        private fun showNotification(
+        private fun schedulePluginAlarm(
             context: Context,
             taskId: Int,
             title: String,
             body: String,
+            atMillis: Long,
+            intervalHours: Int,
+            pluginId: Int,
         ) {
-            createChannel(context)
-            val openIntent = Intent(context, MainActivity::class.java).apply {
-                putExtra(MainActivity.EXTRA_OPEN_TODO_ID, taskId)
-                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            val contentIntent = PendingIntent.getActivity(
-                context,
-                PENDING_INTENT_BASE + taskId,
-                openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            val settings = AlarmSettings(
+                id = pluginId,
+                dateTime = Date(atMillis),
+                assetAudioPath = "assets/sounds/alarm.wav",
+                volumeSettings = VolumeSettings(
+                    volume = 0.9,
+                    fadeDuration = null,
+                    fadeSteps = emptyList(),
+                    volumeEnforced = false,
+                ),
+                notificationSettings = NotificationSettings(
+                    title = "Task reminder: $title",
+                    body = body,
+                    stopButton = "Stop",
+                    icon = "ic_alarm_notification",
+                    androidSnoozeButton = "Snooze",
+                    androidStopAlarmOnDismiss = false,
+                ),
+                loopAudio = true,
+                vibrate = true,
+                warningNotificationOnKill = false,
+                androidFullScreenIntent = true,
+                allowAlarmOverlap = true,
+                allowSameSecondScheduling = true,
+                iOSBackgroundAudio = true,
+                androidStopAlarmOnTermination = false,
+                preferConnectedAudioDevice = false,
+                androidSnoozeDurationMillis = 5L * 60L * 1000L,
+                payload = "{\"t\":\"r\",\"id\":$taskId,\"intervalHours\":$intervalHours,\"label\":${jsonString(title)},\"body\":${jsonString(body)},\"ring\":\"assets/sounds/alarm.wav\"}",
             )
+            AlarmScheduler.schedule(context, settings, requireDurable = true)
+        }
 
-            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Notification.Builder(context, CHANNEL_ID)
-            } else {
-                Notification.Builder(context).setPriority(Notification.PRIORITY_DEFAULT)
-            }
-                .setSmallIcon(R.drawable.ic_alarm_notification)
-                .setContentTitle("Task reminder")
-                .setContentText(title)
-                .setStyle(Notification.BigTextStyle().bigText(body))
-                .setContentIntent(contentIntent)
-                .setAutoCancel(true)
-                .setCategory(Notification.CATEGORY_REMINDER)
-                .setShowWhen(true)
-                .setWhen(System.currentTimeMillis())
-
+        private fun scheduleCompanionAlarm(
+            context: Context,
+            taskId: Int,
+            atMillis: Long,
+        ) {
+            val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+            val pendingIntent = companionPendingIntent(context, taskId)
             try {
-                context.getSystemService(NotificationManager::class.java)
-                    ?.notify(notificationId(taskId), builder.build())
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    !alarmManager.canScheduleExactAlarms()
+                ) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        atMillis,
+                        pendingIntent,
+                    )
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        atMillis,
+                        pendingIntent,
+                    )
+                }
             } catch (_: SecurityException) {
-                // POST_NOTIFICATIONS was denied. The next alarm remains
-                // scheduled; granting permission later restores visibility.
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    atMillis,
+                    pendingIntent,
+                )
             }
         }
 
-        private fun createChannel(context: Context) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Recurring Task Reminders",
-                NotificationManager.IMPORTANCE_DEFAULT,
-            ).apply {
-                description = "Reminds you about enabled tasks every two hours"
-                enableVibration(true)
+        private fun cancelStoredAlarms(
+            context: Context,
+            taskId: Int,
+            prefs: android.content.SharedPreferences,
+        ) {
+            cancelCompanionAlarm(context, taskId)
+            cancelLegacyCompanionAlarm(context, taskId)
+
+            val active = prefs.getInt(activePluginKey(taskId), NO_PLUGIN_ID)
+            val previous = prefs.getInt(previousPluginKey(taskId), NO_PLUGIN_ID)
+            cancelPluginId(context, active)
+            if (previous != NO_PLUGIN_ID && previous != active) {
+                cancelPluginId(context, previous)
             }
+
+            // Clean up the fixed id used by the Dart-only implementation and
+            // the old soft notification implementation.
+            cancelPluginId(context, pluginAlarmId(taskId))
             context.getSystemService(NotificationManager::class.java)
-                ?.createNotificationChannel(channel)
+                ?.cancel(LEGACY_NOTIFICATION_ID_BASE + taskId)
         }
 
-        private fun scheduleAlarm(context: Context, taskId: Int, atMillis: Long) {
-            val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-            val pendingIntent = alarmPendingIntent(context, taskId)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                !alarmManager.canScheduleExactAlarms()
-            ) {
-                // Exact access is requested from Flutter. Keep the reminder
-                // functional when the user has not granted special access.
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    atMillis,
-                    pendingIntent,
+        private fun cancelPluginId(context: Context, pluginId: Int) {
+            if (pluginId == NO_PLUGIN_ID) return
+            val alarmManager = context.getSystemService(AlarmManager::class.java)
+            if (alarmManager != null) {
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    pluginId,
+                    Intent(context, AlarmReceiver::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
-                return
+                alarmManager.cancel(pendingIntent)
             }
 
-            try {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    atMillis,
-                    pendingIntent,
-                )
-            } catch (_: SecurityException) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    atMillis,
-                    pendingIntent,
-                )
-            }
+            // Stop a live foreground-service ring as well as its future alarm.
+            context.sendBroadcast(
+                Intent(context, AlarmReceiver::class.java).apply {
+                    action = AlarmReceiver.ACTION_ALARM_STOP
+                    putExtra("id", pluginId)
+                },
+            )
+            AlarmStorage(context).unsaveAlarm(pluginId)
+            context.getSystemService(NotificationManager::class.java)?.cancel(pluginId)
         }
 
-        private fun cancelAlarm(context: Context, taskId: Int) {
+        private fun cancelCompanionAlarm(context: Context, taskId: Int) {
             val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-            alarmManager.cancel(alarmPendingIntent(context, taskId))
+            alarmManager.cancel(companionPendingIntent(context, taskId))
         }
 
-        private fun alarmPendingIntent(context: Context, taskId: Int): PendingIntent {
+        private fun cancelLegacyCompanionAlarm(context: Context, taskId: Int) {
+            val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
             val intent = Intent(context, RecurringReminderReceiver::class.java).apply {
-                action = ACTION_FIRE
+                action = ACTION_CHAIN
                 putExtra(EXTRA_TASK_ID, taskId)
                 data = android.net.Uri.parse("todo-reminder://$taskId")
             }
+            alarmManager.cancel(
+                PendingIntent.getBroadcast(
+                    context,
+                    LEGACY_COMPANION_REQUEST_CODE_BASE + taskId,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+        }
+
+        private fun companionPendingIntent(context: Context, taskId: Int): PendingIntent {
+            val intent = Intent(context, RecurringReminderReceiver::class.java).apply {
+                action = ACTION_CHAIN
+                putExtra(EXTRA_TASK_ID, taskId)
+                data = android.net.Uri.parse("todo-reminder://companion/$taskId")
+            }
             return PendingIntent.getBroadcast(
                 context,
-                PENDING_INTENT_BASE + taskId,
+                COMPANION_REQUEST_CODE_BASE + taskId,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -257,9 +390,21 @@ class RecurringReminderReceiver : BroadcastReceiver() {
 
         private fun enabledKey(taskId: Int) = "$KEY_ENABLED_PREFIX$taskId"
         private fun nextAtKey(taskId: Int) = "$KEY_NEXT_AT_PREFIX$taskId"
+        private fun intervalKey(taskId: Int) = "$KEY_INTERVAL_PREFIX$taskId"
         private fun titleKey(taskId: Int) = "$KEY_TITLE_PREFIX$taskId"
         private fun bodyKey(taskId: Int) = "$KEY_BODY_PREFIX$taskId"
+        private fun activePluginKey(taskId: Int) = "$KEY_ACTIVE_PLUGIN_PREFIX$taskId"
+        private fun previousPluginKey(taskId: Int) = "$KEY_PREVIOUS_PLUGIN_PREFIX$taskId"
+        private fun sequenceKey(taskId: Int) = "$KEY_SEQUENCE_PREFIX$taskId"
 
-        private const val MINIMUM_DELAY_MILLIS = 1000L
+        private fun jsonString(value: String): String {
+            return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r") + "\""
+        }
+
+        private const val HOUR_MILLIS = 60L * 60L * 1000L
     }
 }

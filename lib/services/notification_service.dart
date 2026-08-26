@@ -178,13 +178,28 @@ class NotificationService {
         : 'Time to work on this task.';
 
     try {
-      await AlarmRingScheduler.scheduleRecurringReminder(
-        todoId: todo.id!,
-        firstAt: firstAt,
-        intervalHours: todo.reminderIntervalHours,
-        title: todo.title,
-        body: body,
-      );
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        // Android keeps the recurrence companion in a native receiver so it
+        // can arm the next alarm even when the Flutter process is dead.
+        await _nativeReminderChannel.invokeMethod<void>(
+          'scheduleRecurringReminder',
+          {
+            'taskId': todo.id,
+            'title': todo.title,
+            'body': body,
+            'firstAtMillis': firstAt.millisecondsSinceEpoch,
+            'intervalHours': todo.reminderIntervalHours,
+          },
+        );
+      } else {
+        await AlarmRingScheduler.scheduleRecurringReminder(
+          todoId: todo.id!,
+          firstAt: firstAt,
+          intervalHours: todo.reminderIntervalHours,
+          title: todo.title,
+          body: body,
+        );
+      }
       debugPrint(
           'Recurring alarm scheduled for task ${todo.id} at $firstAt');
     } catch (error) {
@@ -217,23 +232,21 @@ class NotificationService {
       debugPrint('Legacy reminder cancellation failed: $error');
     }
 
-    // The alarm plugin owns the live ringtone, vibration, foreground service,
-    // and full-screen notification for the current recurring occurrence.
-    await AlarmRingScheduler.stop(
-      AlarmRingScheduler.recurringReminderId(todoId),
-    );
-
-    // Also disarm the old native soft-notification chain from the previous
-    // implementation, if one exists on this device.
     if (defaultTargetPlatform == TargetPlatform.android) {
+      // The native receiver owns the active per-occurrence plugin id and can
+      // stop a ringing foreground service even when ids have rotated.
       try {
         await _nativeReminderChannel.invokeMethod<void>(
           'cancelRecurringReminder',
           todoId,
         );
       } catch (error) {
-        debugPrint('Legacy native reminder cancellation failed: $error');
+        debugPrint('Native recurring reminder cancellation failed: $error');
       }
+    } else {
+      await AlarmRingScheduler.stop(
+        AlarmRingScheduler.recurringReminderId(todoId),
+      );
     }
   }
 

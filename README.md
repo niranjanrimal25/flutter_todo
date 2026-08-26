@@ -93,11 +93,11 @@ flutter test
   `AlarmManager` schedule and foreground service, with the same bundled
   looping ringtone, repeating vibration, full-screen intent, Stop button, and
   Snooze button. The plugin owns the native schedule, so it continues through
-  Flutter process death and restores pending schedules after boot. The app
-  re-arms the next occurrence using the task's selected interval when the
-  task is still pending and its reminder is still enabled. If exact-alarm
-  special access is denied, the plugin falls back to its allow-while-idle
-  inexact path.
+  Flutter process death and restores pending schedules after boot. A native
+  recurrence companion arms the next per-task occurrence through the plugin
+  without waiting for Dart, while the Flutter ring screen also validates the
+  task before re-arming after Stop. If exact-alarm special access is denied,
+  the plugin falls back to its allow-while-idle inexact path.
 - This is intentionally not a basic `flutter_local_notifications` call: that
   API is still used for soft reminders and the timer chronometer, but task
   reminders go through `AlarmRingScheduler` so they do not auto-dismiss or
