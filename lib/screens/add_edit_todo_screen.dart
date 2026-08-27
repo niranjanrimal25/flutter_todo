@@ -67,6 +67,18 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
 
   bool get _isEditing => widget.todo != null;
 
+  String get _reminderScheduleDescription {
+    final unit = _reminderIntervalHours == 1 ? 'hour' : 'hours';
+    if (_dueDate != null) {
+      return 'The due date and time are the first reminder. It repeats every '
+          '$_reminderIntervalHours $unit until the task is completed or '
+          'Reminder is turned off.';
+    }
+    return 'The reminder start time is the first reminder. It repeats every '
+        '$_reminderIntervalHours $unit until the task is completed or '
+        'Reminder is turned off.';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -429,11 +441,10 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          _dueDate != null
-                              ? 'Every $_reminderIntervalHours ${_reminderIntervalHours == 1 ? 'hour' : 'hours'}, starting at the due time'
-                              : 'Every $_reminderIntervalHours ${_reminderIntervalHours == 1 ? 'hour' : 'hours'} after the reminder start time',
+                          _reminderScheduleDescription,
                           style: TextStyle(
                             fontSize: 12,
+                            height: 1.35,
                             color: isDark
                                 ? AppColors.darkTextSecondary
                                 : AppColors.textGrey,
