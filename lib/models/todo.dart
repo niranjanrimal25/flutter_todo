@@ -8,6 +8,9 @@ import 'subtask.dart';
 /// This is intentionally separate from [Todo.isCompleted]. A task can be
 /// actively worked on without being complete, while moving a task to [done]
 /// always synchronizes the legacy completion flag to true.
+///
+/// The order is persisted in SQLite, so append new values rather than
+/// reordering these three.
 enum TodoStatus { todo, inProgress, done }
 
 extension TodoStatusExtension on TodoStatus {
