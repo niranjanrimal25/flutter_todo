@@ -210,25 +210,12 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
                         ),
                         ScaleTransition(
                           scale: _logoScale,
-                          child: Container(
+                          child: Image.asset(
+                            'assets/images/splash_logo.png',
                             width: 96,
                             height: 96,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(26),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.checklist_rounded,
-                              color: AppColors.primary,
-                              size: 58,
-                            ),
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
                           ),
                         ),
                       ],
