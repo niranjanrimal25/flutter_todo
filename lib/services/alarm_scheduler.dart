@@ -57,8 +57,13 @@ class AlarmRingScheduler {
     return 'Classic Beep';
   }
 
-  /// Must be called once before any alarm is set (see main()).
-  static Future<void> init() async {
+  static Future<void>? _initFuture;
+
+  /// Starts plugin initialization once. Callers may await this future without
+  /// duplicating native setup work.
+  static Future<void> init() => _initFuture ??= _initialize();
+
+  static Future<void> _initialize() async {
     try {
       await alarm_plugin.Alarm.init();
     } catch (e) {
@@ -209,6 +214,7 @@ class AlarmRingScheduler {
     required int minutes,
     String? payload,
   }) async {
+    await init();
     await alarm_plugin.Alarm.stop(alarmId);
     final alarmPayload = payload ??
         jsonEncode({
@@ -241,6 +247,7 @@ class AlarmRingScheduler {
     required int minutes,
   }) async {
     final id = recurringReminderId(todoId);
+    await init();
     await alarm_plugin.Alarm.stop(id);
     final payload = jsonEncode({
       't': 'r',
@@ -265,6 +272,7 @@ class AlarmRingScheduler {
 
   static Future<void> stop(int id) async {
     try {
+      await init();
       await alarm_plugin.Alarm.stop(id);
     } catch (e) {
       debugPrint('⚠️ Alarm.stop($id) failed: $e');
@@ -285,6 +293,7 @@ class AlarmRingScheduler {
     bool androidStopAlarmOnTermination = false,
   }) async {
     try {
+      await init();
       final playableRingtone = await _prepareRingtonePath(ringtone);
       await alarm_plugin.Alarm.set(
         alarmSettings: alarm_plugin.AlarmSettings(

@@ -27,15 +27,9 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _loadData() async {
-    // Keep the branded Flutter loading screen visible for a short, consistent
-    // beat even when the local database is already warm. This prevents a
-    // one-frame flash and gives the logo animation time to settle.
-    final minimumSplash = Future<void>.delayed(
-      const Duration(milliseconds: 700),
-    );
-
-    // Load persisted data once, up front, behind a branded splash so the
-    // user never stares at a black/blank screen.
+    // Only the local SQLite reads are awaited here. They run after runApp,
+    // while the Flutter loading screen is already visible, and no artificial
+    // delay keeps the splash on screen once the data is ready.
     try {
       await Future.wait([
         context.read<TodoProvider>().loadTodos(),
@@ -44,7 +38,6 @@ class _MainShellState extends State<MainShell> {
     } catch (_) {
       // Data loading must never block the UI — show the app anyway.
     }
-    await minimumSplash;
     if (!mounted) return;
     setState(() => _loaded = true);
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/alarm.dart';
 import '../services/alarm_scheduler.dart';
-import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 
 class AlarmProvider extends ChangeNotifier {
@@ -11,34 +10,11 @@ class AlarmProvider extends ChangeNotifier {
   List<Alarm> get alarms => _alarms;
 
   Future<void> loadAlarms() async {
+    // AlarmManager/alarm-plugin schedules are persisted natively and restored
+    // by the plugin's boot receiver. Loading the SQLite rows must stay cheap;
+    // avoid cancelling and re-registering every alarm on every cold start.
     _alarms = await StorageService.getAllAlarms();
     _sortAlarms();
-
-    // Rebuild the native schedules from SQLite. This also repairs schedules
-    // lost by an OEM while retaining the selected repeat rule.
-    for (final alarm in List<Alarm>.of(_alarms)) {
-      await NotificationService.cancelLegacyAlarmNotification(alarm.id!);
-      if (!alarm.isEnabled) {
-        await AlarmRingScheduler.stop(alarm.id!);
-        continue;
-      }
-
-      if (alarm.repeat == AlarmRepeat.once &&
-          alarm.nextTriggerAt != null &&
-          !alarm.nextTriggerAt!.isAfter(DateTime.now())) {
-        final expired = alarm.copyWith(
-          isEnabled: false,
-          nextTriggerAt: null,
-        );
-        await StorageService.updateAlarm(expired);
-        _replaceAlarm(expired);
-        await AlarmRingScheduler.stop(alarm.id!);
-        continue;
-      }
-
-      await _scheduleAndPersist(alarm);
-    }
-
     notifyListeners();
   }
 

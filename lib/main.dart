@@ -25,7 +25,7 @@ final GlobalKey<NavigatorState> appNavigatorKey =
 const MethodChannel _nativeNotificationChannel =
     MethodChannel('todo_app/notification');
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   NepaliUtils(Language.nepali);
@@ -38,24 +38,6 @@ void main() async {
     _configureNativeNotificationChannel();
   }
 
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
-
-  // Initialize the native alarm scheduler (AlarmManager + foreground service,
-  // exact alarms, boot rescheduling). Required before scheduling any alarm.
-  await AlarmRingScheduler.init();
-
-  // Initialize notifications in the background so the first frame is not
-  // blocked on permission requests — the branded splash screen shows while
-  // this finishes.
-  NotificationService.initialize(onNotificationTap: _handleNotificationTap)
-      .catchError((_) {
-    debugPrint('Notification initialization failed (continuing anyway)');
-  });
-  // Clean up timer-end notifications scheduled by older app versions.
-  unawaited(NotificationService.cancelLegacyTimerEnd());
-
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -63,7 +45,10 @@ void main() async {
     ),
   );
 
+  // Render the first Flutter frame immediately. Native alarm/notification
+  // setup continues in the background behind MainShell's Flutter loading UI.
   runApp(const MyApp());
+  unawaited(_initializeServices());
 
   // Listen for alarms/timers that start ringing. This also fires after a
   // cold start when the alarm plugin's full-screen intent launches the app
@@ -73,6 +58,22 @@ void main() async {
       _openRingScreen(alarm);
     }
   });
+}
+
+Future<void> _initializeServices() async {
+  // These are deliberately after runApp so native/Flutter splash handoff is
+  // instant. AlarmRingScheduler gates later Alarm.set calls on its init future.
+  unawaited(
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]),
+  );
+  await AlarmRingScheduler.init();
+  NotificationService.initialize(onNotificationTap: _handleNotificationTap)
+      .catchError((_) {
+    debugPrint('Notification initialization failed (continuing anyway)');
+  });
+  unawaited(NotificationService.cancelLegacyTimerEnd());
 }
 
 bool _ringScreenOpen = false;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/todo.dart';
 import '../services/image_storage_service.dart';
@@ -93,21 +95,17 @@ class TodoProvider extends ChangeNotifier {
 
   // Load all todos
   Future<void> loadTodos() async {
+    // SQLite is the only work needed to render the first task list. Native
+    // recurring reminder alarms survive process death/reboot themselves and
+    // are scheduled only when a task changes, so do not re-arm every task on
+    // every cold start.
     _todos = await StorageService.getAllTodos();
-    // Re-arm persisted recurring reminders after a process restart. Android
-    // also repairs these natively at boot, while iOS refreshes its finite
-    // local-notification horizon whenever the app is opened.
-    for (final todo in _todos) {
-      if (todo.id == null) continue;
-      if (todo.reminderTime != null && !todo.isCompleted) {
-        await NotificationService.scheduleRecurringReminder(todo);
-      } else {
-        await NotificationService.cancelRecurringReminder(todo.id!);
-      }
-    }
-
     notifyListeners();
-    await _refreshPendingReminder();
+    unawaited(
+      _refreshPendingReminder().catchError((error) {
+        debugPrint('Pending-task reminder refresh failed: $error');
+      }),
+    );
   }
 
   // Add todo
