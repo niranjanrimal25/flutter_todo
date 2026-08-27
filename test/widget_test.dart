@@ -271,6 +271,13 @@ void main() {
       expect(restored.label, 'My chime');
       expect(restored.path, '/documents/my-chime.wav');
     });
+
+    test('includes the additional bundled tones', () {
+      final labels = AlarmRingScheduler.ringtones
+          .map((tone) => tone.label)
+          .toSet();
+      expect(labels, containsAll(<String>['Bell', 'Digital', 'Pulse']));
+    });
   });
 
   group('Alarm scheduling', () {

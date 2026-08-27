@@ -48,6 +48,9 @@ class AlarmRingScheduler {
     (label: 'Classic Beep', asset: 'assets/sounds/alarm.wav'),
     (label: 'Chime', asset: 'assets/sounds/chime.wav'),
     (label: 'Siren', asset: 'assets/sounds/siren.wav'),
+    (label: 'Bell', asset: 'assets/sounds/bell.wav'),
+    (label: 'Digital', asset: 'assets/sounds/digital.wav'),
+    (label: 'Pulse', asset: 'assets/sounds/pulse.wav'),
   ];
 
   static String ringtoneLabel(String asset) {

@@ -79,10 +79,11 @@ flutter test
   Repeating alarms are re-scheduled from the ring screen and repaired from
   SQLite at app startup; one-time alarms persist their next occurrence and
   are consumed after they ring.
-- Alarm tones are previewed with `audioplayers` and imported audio files are
-  copied to the app's documents directory by `ToneStorageService`. The alarm
-  stores the resulting path, so the alarm plugin can play a custom tone from
-  native code even when Flutter is not running. File/document pickers use
+- Alarm tones are previewed with `audioplayers`. Built-in choices include
+  Classic Beep, Chime, Siren, Bell, Digital, and Pulse; imported audio files
+  are copied to the app's documents directory by `ToneStorageService`. The
+  alarm stores the resulting path, so the alarm plugin can play a custom tone
+  from native code even when Flutter is not running. File/document pickers use
   user-selected file access and do not require broad storage permission; the
   audio file itself is validated and copied into app storage.
 - `AppFeedback` is the shared short-lived in-app SnackBar helper. CRUD and
