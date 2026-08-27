@@ -181,7 +181,9 @@ class _TodoKanbanViewState extends State<TodoKanbanView> {
                 child: todos.isEmpty
                     ? _buildEmptyColumn(status, accent, isReceivingDrop)
                     : ListView.builder(
-                        padding: const EdgeInsets.only(top: 8, bottom: 20),
+                        // Leave room for the Home FAB at the end of a long
+                        // column so its last card can still be scrolled clear.
+                        padding: const EdgeInsets.only(top: 8, bottom: 100),
                         itemCount: todos.length,
                         itemBuilder: (context, index) {
                           final todo = todos[index];
