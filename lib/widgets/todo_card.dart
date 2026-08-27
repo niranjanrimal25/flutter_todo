@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
+import '../services/alarm_scheduler.dart';
 import '../utils/constants.dart';
 import '../widgets/nepali_date_picker_dialog.dart';
 
@@ -235,12 +236,20 @@ class TodoCard extends StatelessWidget {
                                         ? AppColors.darkTextSecondary
                                         : AppColors.textGrey,
                               ),
-                            if (todo.reminderTime != null)
+                            if (todo.reminderTime != null) ...[
                               _buildChip(
                                 icon: Icons.notifications_active_rounded,
                                 label: 'Every ${todo.reminderIntervalHours}h',
                                 color: AppColors.primary,
                               ),
+                              _buildChip(
+                                icon: Icons.music_note_rounded,
+                                label: AlarmRingScheduler.ringtoneLabel(
+                                  todo.reminderTone,
+                                ),
+                                color: AppColors.primary,
+                              ),
+                            ],
                             _buildChip(
                               icon: todo.priority.icon,
                               label: todo.priority.label,

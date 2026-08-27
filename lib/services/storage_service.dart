@@ -6,7 +6,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 7;
+  static const int _dbVersion = 8;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -33,6 +33,7 @@ class StorageService {
             dueDate TEXT,
             reminderTime TEXT,
             reminderIntervalHours INTEGER NOT NULL DEFAULT 2,
+            reminderTone TEXT NOT NULL DEFAULT 'assets/sounds/alarm.wav',
             category TEXT DEFAULT 'General',
             imagePath TEXT,
             subtasks TEXT
@@ -96,6 +97,11 @@ class StorageService {
           ''');
           await db.execute('''
             ALTER TABLE alarms ADD COLUMN nextTriggerAt TEXT
+          ''');
+        }
+        if (oldVersion < 8) {
+          await db.execute('''
+            ALTER TABLE todos ADD COLUMN reminderTone TEXT NOT NULL DEFAULT 'assets/sounds/alarm.wav'
           ''');
         }
       },

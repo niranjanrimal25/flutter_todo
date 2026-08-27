@@ -172,6 +172,7 @@ class AlarmRingScheduler {
     required int todoId,
     required DateTime firstAt,
     required int intervalHours,
+    required String tone,
     required String title,
     required String body,
   }) async {
@@ -181,7 +182,7 @@ class AlarmRingScheduler {
       'intervalHours': intervalHours,
       'label': title,
       'body': body,
-      'ring': ringtones.first.asset,
+      'ring': tone,
     });
 
     await _set(
@@ -189,7 +190,7 @@ class AlarmRingScheduler {
       dateTime: firstAt,
       label: title,
       notificationBody: body,
-      ringtone: ringtones.first.asset,
+      ringtone: tone,
       payload: payload,
       allowAlarmOverlap: true,
       allowSameSecondScheduling: true,
@@ -245,6 +246,7 @@ class AlarmRingScheduler {
   static Future<void> snoozeRecurringReminder({
     required int todoId,
     required int intervalHours,
+    required String tone,
     required String title,
     required String body,
     required int minutes,
@@ -258,14 +260,14 @@ class AlarmRingScheduler {
       'intervalHours': intervalHours,
       'label': title,
       'body': body,
-      'ring': ringtones.first.asset,
+      'ring': tone,
     });
     await _set(
       id: id,
       dateTime: DateTime.now().add(Duration(minutes: minutes)),
       label: title,
       notificationBody: body,
-      ringtone: ringtones.first.asset,
+      ringtone: tone,
       payload: payload,
       allowAlarmOverlap: true,
       allowSameSecondScheduling: true,

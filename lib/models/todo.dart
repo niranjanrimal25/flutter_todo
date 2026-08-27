@@ -20,6 +20,8 @@ class Todo {
   /// Repeat interval for an enabled reminder, clamped to the supported range
   /// of one through 24 hours. Existing tasks default to two hours.
   int reminderIntervalHours;
+  /// Built-in asset or app-owned custom audio path for the task reminder.
+  String reminderTone;
   String category;
   /// Absolute path to the task's locally copied image, when attached.
   String? imagePath;
@@ -35,6 +37,7 @@ class Todo {
     this.dueDate,
     this.reminderTime,
     int reminderIntervalHours = 2,
+    this.reminderTone = 'assets/sounds/alarm.wav',
     this.category = 'General',
     this.imagePath,
     List<Subtask>? subtasks,
@@ -62,6 +65,7 @@ class Todo {
       'dueDate': dueDate?.toIso8601String(),
       'reminderTime': reminderTime?.toIso8601String(),
       'reminderIntervalHours': reminderIntervalHours,
+      'reminderTone': reminderTone,
       'category': category,
       'imagePath': imagePath,
       'subtasks': jsonEncode(
@@ -103,6 +107,8 @@ class Todo {
           : null,
       reminderIntervalHours:
           (map['reminderIntervalHours'] as num?)?.toInt() ?? 2,
+      reminderTone:
+          (map['reminderTone'] as String?) ?? 'assets/sounds/alarm.wav',
       category: (map['category'] as String?) ?? 'General',
       imagePath: map['imagePath'] as String?,
       subtasks: _subtasksFromStorage(map['subtasks']),
@@ -119,6 +125,7 @@ class Todo {
     DateTime? dueDate,
     DateTime? reminderTime,
     int? reminderIntervalHours,
+    String? reminderTone,
     String? category,
     Object? imagePath = _imagePathUnset,
     List<Subtask>? subtasks,
@@ -134,6 +141,7 @@ class Todo {
       reminderTime: reminderTime ?? this.reminderTime,
       reminderIntervalHours:
           reminderIntervalHours ?? this.reminderIntervalHours,
+      reminderTone: reminderTone ?? this.reminderTone,
       category: category ?? this.category,
       imagePath: identical(imagePath, _imagePathUnset)
           ? this.imagePath

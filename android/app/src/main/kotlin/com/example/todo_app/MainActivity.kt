@@ -29,6 +29,8 @@ class MainActivity : FlutterActivity() {
                         val taskId = (arguments?.get("taskId") as? Number)?.toInt()
                         val title = arguments?.get("title") as? String
                         val body = arguments?.get("body") as? String
+                        val tone = arguments?.get("tone") as? String
+                            ?: "assets/sounds/alarm.wav"
                         val firstAt = (arguments?.get("firstAtMillis") as? Number)?.toLong()
                         val intervalHours =
                             (arguments?.get("intervalHours") as? Number)?.toInt() ?: 2
@@ -41,6 +43,7 @@ class MainActivity : FlutterActivity() {
                                 taskId = taskId,
                                 title = title,
                                 body = body,
+                                tone = tone,
                                 firstAtMillis = firstAt,
                                 intervalHours = intervalHours,
                             )

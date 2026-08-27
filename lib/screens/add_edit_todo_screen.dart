@@ -8,11 +8,14 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:nepali_utils/nepali_utils.dart';
+import '../models/alarm_tone.dart';
 import '../models/subtask.dart';
 import '../models/todo.dart';
 import '../providers/todo_provider.dart';
+import '../services/alarm_scheduler.dart';
 import '../services/image_storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/tone_storage_service.dart';
 import '../utils/constants.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/nepali_date_picker_dialog.dart';
@@ -51,6 +54,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
   TimeOfDay? _dueTime;
   DateTime? _reminderTime;
   late int _reminderIntervalHours;
+  String _reminderTone = 'assets/sounds/alarm.wav';
+  List<AlarmTone> _customTones = [];
   bool _hasReminder = false;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
@@ -93,7 +98,10 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     _dueDate = widget.todo?.dueDate;
     _reminderTime = widget.todo?.reminderTime;
     _reminderIntervalHours = widget.todo?.reminderIntervalHours ?? 2;
+    _reminderTone = widget.todo?.reminderTone ?? 'assets/sounds/alarm.wav';
     _hasReminder = widget.todo?.reminderTime != null;
+
+    _loadCustomReminderTones();
 
     if (_dueDate != null) {
       _dueTime = TimeOfDay.fromDateTime(_dueDate!);
@@ -478,6 +486,8 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                           }
                         },
                       ),
+                      const SizedBox(height: 12),
+                      _buildReminderTonePicker(isDark),
                     ],
                     if (_hasReminder &&
                         _dueDate == null &&
@@ -1317,6 +1327,46 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
     }
   }
 
+  Future<void> _loadCustomReminderTones() async {
+    try {
+      final tones = await ToneStorageService.loadCustomTones();
+      if (mounted) setState(() => _customTones = tones);
+    } catch (error) {
+      debugPrint('Reminder tone list could not be loaded: $error');
+    }
+  }
+
+  Widget _buildReminderTonePicker(bool isDark) {
+    final tones = <AlarmTone>[
+      ...AlarmRingScheduler.ringtones.map(
+        (tone) => AlarmTone(label: tone.label, path: tone.asset),
+      ),
+      ..._customTones,
+    ];
+    if (!tones.any((tone) => tone.path == _reminderTone)) {
+      tones.add(AlarmTone(label: 'Selected tone', path: _reminderTone));
+    }
+
+    return DropdownButtonFormField<String>(
+      initialValue: _reminderTone,
+      decoration: const InputDecoration(
+        labelText: 'Reminder tone',
+        prefixIcon: Icon(Icons.music_note_rounded, color: AppColors.primary),
+      ),
+      items: tones
+          .map(
+            (tone) => DropdownMenuItem<String>(
+              value: tone.path,
+              child: Text(tone.label),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        if (value != null) setState(() => _reminderTone = value);
+      },
+    );
+  }
+
   Widget _buildSubtasksEditor(bool isDark) {
     final completed = _subtasks.where((subtask) => subtask.isCompleted).length;
 
@@ -1874,6 +1924,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       dueDate: _dueDate,
       reminderTime: _hasReminder ? _reminderTime : null,
       reminderIntervalHours: _reminderIntervalHours,
+      reminderTone: _reminderTone,
       imagePath: _imagePath,
       subtasks: List<Subtask>.of(_subtasks),
       isCompleted: widget.todo?.isCompleted ?? false,

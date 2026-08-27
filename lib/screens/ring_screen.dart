@@ -71,7 +71,9 @@ class _RingScreenState extends State<RingScreen> {
         : (widget.title.isNotEmpty ? widget.title : 'Alarm');
   }
 
-  String get _ringtone => (_payload?['ring'] as String?) ??
+  String get _ringtone =>
+      (_payload?['ring'] as String?) ??
+      widget.alarmSettings.assetAudioPath ??
       AlarmRingScheduler.ringtones.first.asset;
 
   int? get _todoId => (_payload?['id'] as num?)?.toInt() ??
@@ -110,6 +112,7 @@ class _RingScreenState extends State<RingScreen> {
       await AlarmRingScheduler.snoozeRecurringReminder(
         todoId: _todoId!,
         intervalHours: _reminderIntervalHours,
+        tone: _ringtone,
         title: _label,
         body: _notificationBody,
         minutes: 5,

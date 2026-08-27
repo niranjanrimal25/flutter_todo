@@ -51,6 +51,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
         private const val KEY_INTERVAL_PREFIX = "interval_"
         private const val KEY_TITLE_PREFIX = "title_"
         private const val KEY_BODY_PREFIX = "body_"
+        private const val KEY_TONE_PREFIX = "tone_"
         private const val KEY_ACTIVE_PLUGIN_PREFIX = "active_plugin_"
         private const val KEY_PREVIOUS_PLUGIN_PREFIX = "previous_plugin_"
         private const val KEY_SEQUENCE_PREFIX = "sequence_"
@@ -79,11 +80,13 @@ class RecurringReminderReceiver : BroadcastReceiver() {
             taskId: Int,
             title: String,
             body: String,
+            tone: String,
             firstAtMillis: Long,
             intervalHours: Int,
         ) {
             val appContext = context.applicationContext
             val safeInterval = intervalHours.coerceIn(1, 24)
+            val safeTone = tone.ifBlank { "assets/sounds/alarm.wav" }
             val firstAt = firstAtMillis.coerceAtLeast(
                 System.currentTimeMillis() + MINIMUM_DELAY_MILLIS,
             )
@@ -101,6 +104,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 .putInt(intervalKey(taskId), safeInterval)
                 .putString(titleKey(taskId), title)
                 .putString(bodyKey(taskId), body)
+                .putString(toneKey(taskId), safeTone)
                 .putInt(activePluginKey(taskId), firstPluginId)
                 .putInt(previousPluginKey(taskId), NO_PLUGIN_ID)
                 .putInt(sequenceKey(taskId), 0)
@@ -111,6 +115,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 taskId,
                 title,
                 body,
+                safeTone,
                 firstAt,
                 safeInterval,
                 firstPluginId,
@@ -132,6 +137,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 .remove(intervalKey(taskId))
                 .remove(titleKey(taskId))
                 .remove(bodyKey(taskId))
+                .remove(toneKey(taskId))
                 .remove(activePluginKey(taskId))
                 .remove(previousPluginKey(taskId))
                 .remove(sequenceKey(taskId))
@@ -167,11 +173,14 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                     ?: "Task reminder"
                 val body = prefs.getString(bodyKey(taskId), "Time to work on this task.")
                     ?: "Time to work on this task."
+                val tone = prefs.getString(toneKey(taskId), "assets/sounds/alarm.wav")
+                    ?: "assets/sounds/alarm.wav"
                 schedulePluginAlarm(
                     appContext,
                     taskId,
                     title,
                     body,
+                    tone,
                     nextAt,
                     intervalHours,
                     activePluginId,
@@ -214,11 +223,14 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 ?: "Task reminder"
             val body = prefs.getString(bodyKey(taskId), "Time to work on this task.")
                 ?: "Time to work on this task."
+            val tone = prefs.getString(toneKey(taskId), "assets/sounds/alarm.wav")
+                ?: "assets/sounds/alarm.wav"
             schedulePluginAlarm(
                 context,
                 taskId,
                 title,
                 body,
+                tone,
                 nextAt,
                 intervalHours,
                 nextPluginId,
@@ -231,6 +243,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
             taskId: Int,
             title: String,
             body: String,
+            tone: String,
             atMillis: Long,
             intervalHours: Int,
             pluginId: Int,
@@ -238,7 +251,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
             val settings = AlarmSettings(
                 id = pluginId,
                 dateTime = Date(atMillis),
-                assetAudioPath = "assets/sounds/alarm.wav",
+                assetAudioPath = tone,
                 volumeSettings = VolumeSettings(
                     volume = 0.9,
                     fadeDuration = null,
@@ -391,6 +404,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
         private fun intervalKey(taskId: Int) = "$KEY_INTERVAL_PREFIX$taskId"
         private fun titleKey(taskId: Int) = "$KEY_TITLE_PREFIX$taskId"
         private fun bodyKey(taskId: Int) = "$KEY_BODY_PREFIX$taskId"
+        private fun toneKey(taskId: Int) = "$KEY_TONE_PREFIX$taskId"
         private fun activePluginKey(taskId: Int) = "$KEY_ACTIVE_PLUGIN_PREFIX$taskId"
         private fun previousPluginKey(taskId: Int) = "$KEY_PREVIOUS_PLUGIN_PREFIX$taskId"
         private fun sequenceKey(taskId: Int) = "$KEY_SEQUENCE_PREFIX$taskId"

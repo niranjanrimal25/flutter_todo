@@ -70,10 +70,11 @@ flutter test
   for broad storage access. Camera and photo usage descriptions are declared
   in the platform manifests.
 - A task's nullable `reminderTime` is its Reminder ON/OFF state. While it is
-  on, `reminderIntervalHours` controls a one-to-24-hour cadence. If the task
-  has a due date and time, that is the first cadence anchor; otherwise the
-  reminder start time is used. Editing the task re-arms the schedule, while
-  completing, deleting, or turning the toggle off cancels it.
+  on, `reminderIntervalHours` controls a one-to-24-hour cadence and
+  `reminderTone` controls the alarm sound. If the task has a due date and time,
+  that is the first cadence anchor; otherwise the reminder start time is used.
+  Editing the task re-arms the schedule, while completing, deleting, or
+  turning the toggle off cancels it.
 - Alarms store `AlarmRepeat.once`, `AlarmRepeat.everyday`, or
   `AlarmRepeat.custom` plus ISO weekdays (Monday = 1 through Sunday = 7).
   Repeating alarms are re-scheduled from the ring screen and repaired from

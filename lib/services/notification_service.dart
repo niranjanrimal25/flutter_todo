@@ -187,6 +187,7 @@ class NotificationService {
             'taskId': todo.id,
             'title': todo.title,
             'body': body,
+            'tone': todo.reminderTone,
             'firstAtMillis': firstAt.millisecondsSinceEpoch,
             'intervalHours': todo.reminderIntervalHours,
           },
@@ -196,6 +197,7 @@ class NotificationService {
           todoId: todo.id!,
           firstAt: firstAt,
           intervalHours: todo.reminderIntervalHours,
+          tone: todo.reminderTone,
           title: todo.title,
           body: body,
         );

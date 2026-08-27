@@ -29,6 +29,7 @@ void main() {
         dueDate: DateTime(2026, 8, 25, 18, 0),
         reminderTime: DateTime(2026, 8, 25, 9, 0),
         reminderIntervalHours: 5,
+        reminderTone: 'assets/sounds/siren.wav',
         category: 'Shopping',
         imagePath: '/app/documents/todo_images/groceries.jpg',
         subtasks: [
@@ -48,6 +49,7 @@ void main() {
       expect(restored.dueDate, todo.dueDate);
       expect(restored.reminderTime, todo.reminderTime);
       expect(restored.reminderIntervalHours, 5);
+      expect(restored.reminderTone, 'assets/sounds/siren.wav');
       expect(restored.category, 'Shopping');
       expect(restored.imagePath, '/app/documents/todo_images/groceries.jpg');
       expect(restored.subtasks, hasLength(2));
@@ -67,6 +69,7 @@ void main() {
       expect(restored.isCompleted, isFalse);
       expect(restored.priority, Priority.medium);
       expect(restored.reminderIntervalHours, 2);
+      expect(restored.reminderTone, 'assets/sounds/alarm.wav');
       expect(restored.category, 'General');
       expect(restored.imagePath, isNull);
     });
