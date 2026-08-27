@@ -190,6 +190,31 @@ class TodoProvider extends ChangeNotifier {
     await _refreshPendingReminder();
   }
 
+  /// Moves a task between Kanban columns and persists the move immediately.
+  ///
+  /// The legacy boolean remains part of the model for compatibility with
+  /// existing filters and reminder code: Done always means completed, while
+  /// To Do and In Progress both mean unfinished. List sorting is unchanged;
+  /// this method only changes the status used by the Kanban grouping.
+  Future<void> updateTodoStatus(int id, TodoStatus status) async {
+    final index = _todos.indexWhere((todo) => todo.id == id);
+    if (index == -1 || _todos[index].status == status) return;
+
+    final updated = _todos[index].copyWith(status: status);
+    // A task moved to Done must stop its recurring reminder. Moving it back
+    // to an unfinished column re-arms the reminder if one was configured.
+    await NotificationService.cancelRecurringReminder(id);
+    await StorageService.updateTodo(updated);
+    _todos[index] = updated;
+
+    if (!updated.isCompleted && updated.reminderTime != null) {
+      await NotificationService.scheduleRecurringReminder(updated);
+    }
+
+    notifyListeners();
+    await _refreshPendingReminder();
+  }
+
   // Toggle completion
   Future<void> toggleTodo(int id) async {
     final index = _todos.indexWhere((t) => t.id == id);

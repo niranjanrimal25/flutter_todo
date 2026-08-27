@@ -44,6 +44,7 @@ void main() {
       expect(restored.title, 'Buy groceries');
       expect(restored.description, 'Milk, eggs, bread');
       expect(restored.isCompleted, isTrue);
+      expect(restored.status, TodoStatus.done);
       expect(restored.priority, Priority.high);
       expect(restored.createdAt, todo.createdAt);
       expect(restored.dueDate, todo.dueDate);
@@ -67,6 +68,7 @@ void main() {
       expect(restored.dueDate, isNull);
       expect(restored.reminderTime, isNull);
       expect(restored.isCompleted, isFalse);
+      expect(restored.status, TodoStatus.todo);
       expect(restored.priority, Priority.medium);
       expect(restored.reminderIntervalHours, 2);
       expect(restored.reminderTone, 'assets/sounds/alarm.wav');
@@ -100,6 +102,38 @@ void main() {
       expect(updated.imagePath, isNull);
       expect(updated.subtasks, hasLength(1));
       expect(updated.subtasks.single.title, 'Do it');
+    });
+
+    test('status stays separate from completion and is synchronized when changed', () {
+      final inProgress = Todo(
+        title: 'Write report',
+        isCompleted: true,
+        status: TodoStatus.inProgress,
+      );
+
+      expect(inProgress.status, TodoStatus.inProgress);
+      expect(inProgress.isCompleted, isFalse);
+
+      final done = inProgress.copyWith(status: TodoStatus.done);
+      expect(done.status, TodoStatus.done);
+      expect(done.isCompleted, isTrue);
+
+      final movedBack = done.copyWith(status: TodoStatus.todo);
+      expect(movedBack.status, TodoStatus.todo);
+      expect(movedBack.isCompleted, isFalse);
+    });
+
+    test('legacy rows without status infer Done from isCompleted', () {
+      final restored = Todo.fromMap({
+        'id': 9,
+        'title': 'Legacy task',
+        'isCompleted': 1,
+        'priority': Priority.low.index,
+        'createdAt': DateTime(2026, 8, 20).toIso8601String(),
+      });
+
+      expect(restored.status, TodoStatus.done);
+      expect(restored.isCompleted, isTrue);
     });
 
     test('priority labels map correctly', () {

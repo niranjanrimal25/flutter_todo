@@ -11,9 +11,10 @@ import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/nepali_calendar_widget.dart';
 import '../widgets/todo_calendar_view.dart';
+import '../widgets/todo_kanban_view.dart';
 import 'add_edit_todo_screen.dart';
 
-enum _HomeViewMode { list, calendar }
+enum _HomeViewMode { list, calendar, kanban }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,6 +53,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return 'Good Evening 🌙';
   }
 
+  String _viewModeLabel(_HomeViewMode mode) {
+    switch (mode) {
+      case _HomeViewMode.list:
+        return 'List';
+      case _HomeViewMode.calendar:
+        return 'Calendar';
+      case _HomeViewMode.kanban:
+        return 'Kanban';
+    }
+  }
+
+  IconData _viewModeIcon(_HomeViewMode mode) {
+    switch (mode) {
+      case _HomeViewMode.list:
+        return Icons.view_list_rounded;
+      case _HomeViewMode.calendar:
+        return Icons.calendar_month_rounded;
+      case _HomeViewMode.kanban:
+        return Icons.view_kanban_rounded;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -66,9 +89,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _buildFilterChips(isDark),
             if (_isSearching) _buildSearchBar(),
             Expanded(
-              child: _viewMode == _HomeViewMode.list
-                  ? _buildTodoList(isDark)
-                  : _buildCalendarView(),
+              child: switch (_viewMode) {
+                _HomeViewMode.list => _buildTodoList(isDark),
+                _HomeViewMode.calendar => _buildCalendarView(),
+                _HomeViewMode.kanban => _buildKanbanView(),
+              },
             ),
           ],
         ),
@@ -168,29 +193,49 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 },
               ),
               const SizedBox(width: 8),
-              IconButton(
-                tooltip: _viewMode == _HomeViewMode.list
-                    ? 'Calendar view'
-                    : 'List view',
-                onPressed: () {
-                  setState(() {
-                    _viewMode = _viewMode == _HomeViewMode.list
-                        ? _HomeViewMode.calendar
-                        : _HomeViewMode.list;
-                  });
-                },
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: Icon(
-                    _viewMode == _HomeViewMode.list
-                        ? Icons.calendar_month_rounded
-                        : Icons.view_list_rounded,
-                    key: ValueKey(_viewMode),
-                    color: AppColors.primary,
-                  ),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                child: PopupMenuButton<_HomeViewMode>(
+                  tooltip: 'Change view (${_viewModeLabel(_viewMode)})',
+                  onSelected: (mode) => setState(() => _viewMode = mode),
+                  padding: EdgeInsets.zero,
+                  icon: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: Icon(
+                      _viewModeIcon(_viewMode),
+                      key: ValueKey(_viewMode),
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  itemBuilder: (context) => _HomeViewMode.values
+                    .map(
+                      (mode) => PopupMenuItem<_HomeViewMode>(
+                        value: mode,
+                        child: Row(
+                          children: [
+                            Icon(
+                              _viewModeIcon(mode),
+                              size: 20,
+                              color: mode == _viewMode
+                                  ? AppColors.primary
+                                  : AppColors.textGrey,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(_viewModeLabel(mode))),
+                            if (mode == _viewMode)
+                              const Icon(
+                                Icons.check_rounded,
+                                size: 18,
+                                color: AppColors.primary,
+                              ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
                 ),
               ),
               const SizedBox(width: 8),
@@ -388,6 +433,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildCalendarView() {
     return TodoCalendarView(
+      onToggle: _toggleTodo,
+      onEdit: (todo) => _navigateToAddEdit(context, todo: todo),
+      onDelete: (todo) => _showDeleteDialog(context, todo.id!),
+    );
+  }
+
+  Widget _buildKanbanView() {
+    return TodoKanbanView(
+      onStatusChanged: (todo, status) =>
+          context.read<TodoProvider>().updateTodoStatus(todo.id!, status),
       onToggle: _toggleTodo,
       onEdit: (todo) => _navigateToAddEdit(context, todo: todo),
       onDelete: (todo) => _showDeleteDialog(context, todo.id!),

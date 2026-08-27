@@ -3,6 +3,26 @@ import 'dart:convert';
 import '../utils/constants.dart';
 import 'subtask.dart';
 
+/// The Kanban column a task belongs to.
+///
+/// This is intentionally separate from [Todo.isCompleted]. A task can be
+/// actively worked on without being complete, while moving a task to [done]
+/// always synchronizes the legacy completion flag to true.
+enum TodoStatus { todo, inProgress, done }
+
+extension TodoStatusExtension on TodoStatus {
+  String get label {
+    switch (this) {
+      case TodoStatus.todo:
+        return 'To Do';
+      case TodoStatus.inProgress:
+        return 'In Progress';
+      case TodoStatus.done:
+        return 'Done';
+    }
+  }
+}
+
 class Todo {
   static const Object _imagePathUnset = Object();
 
@@ -10,6 +30,7 @@ class Todo {
   String title;
   String description;
   bool isCompleted;
+  TodoStatus status;
   Priority priority;
   DateTime createdAt;
   DateTime? dueDate;
@@ -31,7 +52,8 @@ class Todo {
     this.id,
     required this.title,
     this.description = '',
-    this.isCompleted = false,
+    bool? isCompleted,
+    TodoStatus? status,
     this.priority = Priority.medium,
     DateTime? createdAt,
     this.dueDate,
@@ -41,7 +63,11 @@ class Todo {
     this.category = 'General',
     this.imagePath,
     List<Subtask>? subtasks,
-  })  : reminderIntervalHours = reminderIntervalHours.clamp(1, 24).toInt(),
+  })  : isCompleted = status == TodoStatus.done ||
+            (status == null && isCompleted == true),
+        status = status ??
+            (isCompleted == true ? TodoStatus.done : TodoStatus.todo),
+        reminderIntervalHours = reminderIntervalHours.clamp(1, 24).toInt(),
         subtasks = List<Subtask>.of(subtasks ?? const <Subtask>[]),
         createdAt = createdAt ?? DateTime.now();
 
@@ -60,6 +86,7 @@ class Todo {
       'title': title,
       'description': description,
       'isCompleted': isCompleted ? 1 : 0,
+      'status': status.index,
       'priority': priority.index,
       'createdAt': createdAt.toIso8601String(),
       'dueDate': dueDate?.toIso8601String(),
@@ -93,11 +120,23 @@ class Todo {
   }
 
   factory Todo.fromMap(Map<String, dynamic> map) {
+    final completedValue = map['isCompleted'];
+    final wasCompleted = completedValue is bool
+        ? completedValue
+        : (completedValue as num?)?.toInt() == 1;
+    final storedStatus = (map['status'] as num?)?.toInt();
+    final restoredStatus = storedStatus != null &&
+            storedStatus >= 0 &&
+            storedStatus < TodoStatus.values.length
+        ? TodoStatus.values[storedStatus]
+        : (wasCompleted ? TodoStatus.done : TodoStatus.todo);
+
     return Todo(
       id: map['id'] as int?,
       title: map['title'] as String,
       description: (map['description'] as String?) ?? '',
-      isCompleted: (map['isCompleted'] as int) == 1,
+      isCompleted: wasCompleted,
+      status: restoredStatus,
       priority: Priority.values[map['priority'] as int],
       createdAt: DateTime.parse(map['createdAt'] as String),
       dueDate:
@@ -120,6 +159,7 @@ class Todo {
     String? title,
     String? description,
     bool? isCompleted,
+    TodoStatus? status,
     Priority? priority,
     DateTime? createdAt,
     DateTime? dueDate,
@@ -130,11 +170,22 @@ class Todo {
     Object? imagePath = _imagePathUnset,
     List<Subtask>? subtasks,
   }) {
+    // Completion-only callers (including the existing list checkbox) retain
+    // their old API while moving the new status in lockstep. Status wins when
+    // both values are supplied, which prevents contradictory persisted rows.
+    final nextStatus = status ??
+        (isCompleted == null
+            ? this.status
+            : isCompleted!
+                ? TodoStatus.done
+                : TodoStatus.todo);
+
     return Todo(
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
       isCompleted: isCompleted ?? this.isCompleted,
+      status: nextStatus,
       priority: priority ?? this.priority,
       createdAt: createdAt ?? this.createdAt,
       dueDate: dueDate ?? this.dueDate,

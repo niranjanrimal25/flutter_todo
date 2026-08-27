@@ -1927,6 +1927,9 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       reminderTone: _reminderTone,
       imagePath: _imagePath,
       subtasks: List<Subtask>.of(_subtasks),
+      // Keep a task's Kanban column when editing it. New tasks use To Do;
+      // completion and status are normalized by the Todo constructor.
+      status: widget.todo?.status,
       isCompleted: widget.todo?.isCompleted ?? false,
       createdAt: widget.todo?.createdAt ?? DateTime.now(),
     );

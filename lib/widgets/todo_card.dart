@@ -13,6 +13,7 @@ class TodoCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool compact;
 
   const TodoCard({
     super.key,
@@ -20,11 +21,14 @@ class TodoCard extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (compact) return _buildCompactCard(isDark);
 
     Widget compactAction({
       required IconData icon,
@@ -269,6 +273,122 @@ class TodoCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A denser version used by the Kanban columns. It deliberately reuses
+  /// TodoCard's callbacks and priority/date styling without putting a full
+  /// Slidable action pane inside a narrow board column.
+  Widget _buildCompactCard(bool isDark) {
+    final secondaryColor =
+        isDark ? AppColors.darkTextSecondary : AppColors.textGrey;
+    final dueColor = _isOverdue() ? AppColors.danger : secondaryColor;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          onTap: onEdit,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 4,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: todo.priority.color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                GestureDetector(
+                  onTap: onToggle,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: todo.isCompleted
+                          ? AppColors.success
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: todo.isCompleted
+                            ? AppColors.success
+                            : secondaryColor,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: todo.isCompleted
+                        ? const Icon(
+                            Icons.check_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        todo.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: todo.isCompleted
+                              ? secondaryColor
+                              : isDark
+                                  ? AppColors.darkTextPrimary
+                                  : AppColors.textDark,
+                          decoration: todo.isCompleted
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (todo.dueDate != null)
+                            _buildChip(
+                              icon: Icons.calendar_today_rounded,
+                              label: NepaliDatePickerHelper.formatNepaliDate(
+                                todo.dueDate!.toNepaliDateTime(),
+                              ),
+                              color: dueColor,
+                            ),
+                          _buildChip(
+                            icon: todo.priority.icon,
+                            label: todo.priority.label,
+                            color: todo.priority.color,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.drag_indicator_rounded,
+                  size: 20,
+                  color: secondaryColor.withValues(alpha: 0.7),
+                ),
+              ],
             ),
           ),
         ),

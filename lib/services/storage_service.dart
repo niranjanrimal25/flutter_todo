@@ -6,7 +6,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 8;
+  static const int _dbVersion = 9;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -28,6 +28,7 @@ class StorageService {
             title TEXT NOT NULL,
             description TEXT,
             isCompleted INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
             priority INTEGER NOT NULL DEFAULT 1,
             createdAt TEXT NOT NULL,
             dueDate TEXT,
@@ -102,6 +103,17 @@ class StorageService {
         if (oldVersion < 8) {
           await db.execute('''
             ALTER TABLE todos ADD COLUMN reminderTone TEXT NOT NULL DEFAULT 'assets/sounds/alarm.wav'
+          ''');
+        }
+        if (oldVersion < 9) {
+          // Keep the existing completion flag for filters, notifications, and
+          // older app code, while giving every task a Kanban column. Existing
+          // completed tasks become Done; all other tasks start in To Do.
+          await db.execute('''
+            ALTER TABLE todos ADD COLUMN status INTEGER NOT NULL DEFAULT 0
+          ''');
+          await db.execute('''
+            UPDATE todos SET status = 2 WHERE isCompleted = 1
           ''');
         }
       },
