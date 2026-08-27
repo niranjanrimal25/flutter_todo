@@ -23,9 +23,25 @@ class AlarmRingScheduler {
   /// Separate AlarmManager/notification namespace for recurring task alarms.
   /// Regular alarms use their database ids and the timer uses [timerAlarmId].
   static const int recurringReminderIdBase = 600000;
+  static const int recurringReminderIdStride = 100;
 
   static int recurringReminderId(int todoId) =>
       recurringReminderIdBase + todoId;
+
+  /// Native Android uses a distinct id for each occurrence so the next alarm
+  /// can be armed before the current one is manually stopped.
+  static int recurringOccurrenceId(int todoId, int sequence) =>
+      recurringReminderIdBase + todoId * recurringReminderIdStride +
+      sequence % recurringReminderIdStride;
+
+  static bool isRecurringOccurrenceId(int alarmId) {
+    return alarmId >= recurringReminderIdBase + recurringReminderIdStride;
+  }
+
+  static int? recurringTodoIdFromAlarmId(int alarmId) {
+    if (!isRecurringOccurrenceId(alarmId)) return null;
+    return (alarmId - recurringReminderIdBase) ~/ recurringReminderIdStride;
+  }
 
   /// Bundled ringtones the user can pick per alarm.
   static const List<({String label, String asset})> ringtones = [

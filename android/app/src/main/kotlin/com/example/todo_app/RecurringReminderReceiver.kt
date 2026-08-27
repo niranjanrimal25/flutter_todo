@@ -259,11 +259,9 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 androidFullScreenIntent = true,
                 allowAlarmOverlap = true,
                 allowSameSecondScheduling = true,
-                iOSBackgroundAudio = true,
                 androidStopAlarmOnTermination = false,
                 preferConnectedAudioDevice = false,
                 androidSnoozeDurationMillis = 5L * 60L * 1000L,
-                payload = "{\"t\":\"r\",\"id\":$taskId,\"intervalHours\":$intervalHours,\"label\":${jsonString(title)},\"body\":${jsonString(body)},\"ring\":\"assets/sounds/alarm.wav\"}",
             )
             AlarmScheduler.schedule(context, settings, requireDurable = true)
         }
@@ -396,14 +394,6 @@ class RecurringReminderReceiver : BroadcastReceiver() {
         private fun activePluginKey(taskId: Int) = "$KEY_ACTIVE_PLUGIN_PREFIX$taskId"
         private fun previousPluginKey(taskId: Int) = "$KEY_PREVIOUS_PLUGIN_PREFIX$taskId"
         private fun sequenceKey(taskId: Int) = "$KEY_SEQUENCE_PREFIX$taskId"
-
-        private fun jsonString(value: String): String {
-            return "\"" + value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r") + "\""
-        }
 
         private const val HOUR_MILLIS = 60L * 60L * 1000L
     }

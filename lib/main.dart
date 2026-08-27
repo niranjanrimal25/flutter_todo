@@ -85,7 +85,8 @@ void _openRingScreen(AlarmSettings alarm) {
   final payload = alarm.payload;
   final isTimer = payload != null && payload.contains('"t":"t"');
   final isRecurringReminder =
-      payload != null && payload.contains('"t":"r"');
+      (payload != null && payload.contains('"t":"r"')) ||
+      AlarmRingScheduler.isRecurringOccurrenceId(alarm.id);
   final isAlarm = !isTimer;
 
   WidgetsBinding.instance.addPostFrameCallback((_) {

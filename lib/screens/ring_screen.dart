@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:alarm/alarm.dart' as alarm_plugin;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/alarm.dart';
@@ -58,18 +59,27 @@ class _RingScreenState extends State<RingScreen> {
     return null;
   }
 
-  String get _label =>
-      (_payload?['label'] as String?)?.trim().isNotEmpty == true
-          ? _payload!['label'] as String
-          : (widget.title.isNotEmpty ? widget.title : 'Alarm');
+  String get _label {
+    final payloadLabel = (_payload?['label'] as String?)?.trim();
+    if (payloadLabel != null && payloadLabel.isNotEmpty) return payloadLabel;
+
+    final nativeTitle = widget.alarmSettings.notificationSettings.title
+        .replaceFirst('Task reminder: ', '')
+        .replaceFirst('⏰ ', '');
+    return nativeTitle.isNotEmpty
+        ? nativeTitle
+        : (widget.title.isNotEmpty ? widget.title : 'Alarm');
+  }
 
   String get _ringtone => (_payload?['ring'] as String?) ??
       AlarmRingScheduler.ringtones.first.asset;
 
-  int? get _todoId => (_payload?['id'] as num?)?.toInt();
+  int? get _todoId => (_payload?['id'] as num?)?.toInt() ??
+      AlarmRingScheduler.recurringTodoIdFromAlarmId(widget.alarmSettings.id);
 
   String get _notificationBody =>
-      (_payload?['body'] as String?) ?? 'Time to work on this task.';
+      (_payload?['body'] as String?) ??
+      widget.alarmSettings.notificationSettings.body;
 
   int get _reminderIntervalHours =>
       (((_payload?['intervalHours'] as num?)?.toInt() ?? 2)
@@ -94,7 +104,9 @@ class _RingScreenState extends State<RingScreen> {
     if (_actionInProgress) return;
     _actionInProgress = true;
 
-    if (widget.isRecurringReminder && _todoId != null) {
+    if (widget.isRecurringReminder &&
+        _todoId != null &&
+        defaultTargetPlatform != TargetPlatform.android) {
       await AlarmRingScheduler.snoozeRecurringReminder(
         todoId: _todoId!,
         intervalHours: _reminderIntervalHours,
@@ -103,6 +115,9 @@ class _RingScreenState extends State<RingScreen> {
         minutes: 5,
       );
     } else {
+      // Android's native recurrence companion owns the rotating plugin alarm
+      // id. Snooze the exact alarm that is ringing; the companion retains the
+      // next interval in the background.
       await AlarmRingScheduler.snooze(
         alarmId: widget.alarmSettings.id,
         label: _label,
