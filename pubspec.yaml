@@ -33,6 +33,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^3.0.1
   flutter_native_splash: ^2.4.8
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -55,3 +56,17 @@ flutter_native_splash:
     image: assets/images/splash_logo.png
     icon_background_color: "#6C63FF"
     icon_background_color_dark: "#6C63FF"
+
+# Run `dart run flutter_launcher_icons` after changing these assets.
+# Android uses separate adaptive foreground/background layers; iOS uses the
+# opaque 1024px source and removes alpha during generation.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/app_icon.png
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  adaptive_icon_background: "#6C63FF"
+  adaptive_icon_foreground: assets/images/app_icon_foreground.png
+  adaptive_icon_monochrome: assets/images/app_icon_foreground.png
+  adaptive_icon_foreground_inset: 0

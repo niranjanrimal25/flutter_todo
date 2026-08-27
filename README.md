@@ -9,6 +9,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - ☑️ Subtasks / checklists with add, edit, delete, completion toggles, and progress tracking
 - 🎵 Built-in and custom alarm tones with five-second previews and persistent device-file imports
 - 🚀 Native `flutter_native_splash` launch screen followed by an animated branded loading screen while local data loads
+- 🎨 Branded launcher icon setup for Android adaptive icons and iOS using `flutter_launcher_icons`
 - ✅ Reusable in-app SnackBar confirmations for task, alarm, and timer actions
 - 🔔 **Recurring task reminders** — optional per-task ON/OFF reminders every 1–24 hours, with due-time anchoring, stable notification IDs, reboot/process-death recovery, and notification deep links back to the task
 - ⏰ **Alarm section** — set one-time, everyday, or custom day-wise alarms with labels and bundled/custom tones; they **ring exactly on time** — looping sound + continuous vibration from a foreground service, full-screen alert over the lock screen, Stop/Snooze on the notification and the ring screen — even when the app is killed or the phone was rebooted (alarms reschedule automatically at boot)
@@ -84,6 +85,33 @@ flutter test
   Flutter then shows the existing animated branded loading screen while both
   SQLite todos and alarms load, with a short minimum display time for a smooth
   transition into the task list.
+- `flutter_launcher_icons` is configured to generate the branded launcher icon
+  for Android and iOS. It reuses the existing checklist mark in two prepared
+  1024x1024 PNGs: `assets/images/app_icon.png` is the opaque iOS/fallback
+  source, and `assets/images/app_icon_foreground.png` is the transparent
+  adaptive foreground (also used for Android 13+ themed monochrome icons).
+  Regenerate after `flutter pub get` with:
+
+  ```bash
+  dart run flutter_launcher_icons
+  ```
+
+  For a future logo upload, provide an sRGB PNG at 1024x1024 pixels. Keep an
+  iOS source opaque and full-bleed because Apple applies its own rounded mask.
+  For Android adaptive icons, provide a transparent 1024x1024 foreground and
+  keep important artwork inside the central 66x66 dp safe zone of Android's
+  108x108 dp adaptive canvas (roughly a 626px diameter centered area); leave
+  the outer area transparent and use a separate solid background color or
+  layer. Avoid text and fine details near the edge because launchers apply
+  different masks and scaling.
+- Runtime alternate launcher-icon switching is intentionally not enabled yet.
+  iOS requires `setAlternateIconName` plus alternate `AppIcon` asset
+  definitions, while Android requires multiple disabled/enabled
+  `activity-alias` launcher entries and native component toggling. The app
+  currently has one reliable cross-platform default rather than exposing a
+  Settings control that would work on only one platform or risk duplicate
+  launcher entries. Alternate static icon sources can be added later without
+  changing the primary app icon configuration.
 - Camera access is requested only when Capture from camera is selected. iOS
   requests Photos access (including limited-library access) for the gallery;
   Android uses its system Photo Picker for gallery selection and does not ask
