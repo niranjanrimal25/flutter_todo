@@ -10,7 +10,10 @@ import '../widgets/todo_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/nepali_calendar_widget.dart';
+import '../widgets/todo_calendar_view.dart';
 import 'add_edit_todo_screen.dart';
+
+enum _HomeViewMode { list, calendar }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isSearching = false;
+  _HomeViewMode _viewMode = _HomeViewMode.list;
   final _searchController = TextEditingController();
   late AnimationController _fabController;
   late Animation<double> _fabAnimation;
@@ -61,7 +65,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _buildStatsRow(isDark),
             _buildFilterChips(isDark),
             if (_isSearching) _buildSearchBar(),
-            Expanded(child: _buildTodoList(isDark)),
+            Expanded(
+              child: _viewMode == _HomeViewMode.list
+                  ? _buildTodoList(isDark)
+                  : _buildCalendarView(),
+            ),
           ],
         ),
       ),
@@ -158,6 +166,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   );
                 },
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: _viewMode == _HomeViewMode.list
+                    ? 'Calendar view'
+                    : 'List view',
+                onPressed: () {
+                  setState(() {
+                    _viewMode = _viewMode == _HomeViewMode.list
+                        ? _HomeViewMode.calendar
+                        : _HomeViewMode.list;
+                  });
+                },
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: Icon(
+                    _viewMode == _HomeViewMode.list
+                        ? Icons.calendar_month_rounded
+                        : Icons.view_list_rounded,
+                    key: ValueKey(_viewMode),
+                    color: AppColors.primary,
+                  ),
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                ),
               ),
               const SizedBox(width: 8),
               IconButton(
@@ -349,6 +383,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCalendarView() {
+    return TodoCalendarView(
+      onToggle: _toggleTodo,
+      onEdit: (todo) => _navigateToAddEdit(context, todo: todo),
+      onDelete: (todo) => _showDeleteDialog(context, todo.id!),
     );
   }
 

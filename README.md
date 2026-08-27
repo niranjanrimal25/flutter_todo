@@ -17,6 +17,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🇳🇵 Nepali dates shown in Devanagari digits and month names
 - 🏷️ Priorities (Low / Medium / High), categories, and search
 - 🔎 Filter tasks: All / Today / Completed / Pending
+- 📅 Calendar view with due-date priority markers, month swiping, Today jump, and selected-day task cards
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
@@ -53,6 +54,13 @@ flutter test
 - Subtasks are stored as JSON in the todo row so existing installations can
   migrate in place. A task card shows checklist progress, while the add/edit
   screen provides add, edit, delete, and completion controls.
+- The Home app-bar calendar button switches between the existing list and a
+  Gregorian `table_calendar` month grid. Due days show one dot per priority
+  (or the highest-priority dot when space is limited); selecting a day shows
+  that day's already-priority-sorted task cards below. The selected day also
+  shows its BS/Nepali date because the app's due-date picker remains Nepali-
+  aware; the grid itself stays Gregorian because `table_calendar` is a
+  Gregorian month-grid widget.
 - `flutter_native_splash` is configured in `pubspec.yaml` with the branded
   purple background and logo. If native files need to be regenerated after a
   splash configuration change, run:
