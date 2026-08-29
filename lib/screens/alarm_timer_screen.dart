@@ -627,7 +627,7 @@ class _AlarmTabState extends State<_AlarmTab> {
                   toneLabel: widget.toneLabel,
                   onDelete: () => _deleteAlarm(alarm),
                 );
-              }).toList(),
+              }),
           ],
         );
       },

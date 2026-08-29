@@ -142,8 +142,8 @@ class _TodoKanbanViewState extends State<TodoKanbanView> {
     final isReceivingDrop = _draggedTaskId != null;
 
     return DragTarget<Todo>(
-      onWillAccept: (todo) => todo != null,
-      onAccept: (todo) => unawaited(_moveTask(todo, status)),
+      onWillAcceptWithDetails: (_) => true,
+      onAcceptWithDetails: (details) => unawaited(_moveTask(details.data, status)),
       builder: (context, candidates, rejected) {
         final isHovering = candidates.isNotEmpty;
         final background = isDark ? AppColors.darkCard : AppColors.cardWhite;

@@ -456,41 +456,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          child: ListView(
+          child: ListView.builder(
             key: ValueKey(provider.currentFilter),
             padding: const EdgeInsets.only(bottom: 100),
-            children: [
-              // Nepali (Bikram Sambat) calendar — scrolls with the task list.
-              const NepaliCalendarWidget(),
-              const SizedBox(height: 8),
-              if (todos.isEmpty)
-                const Padding(
+            itemCount: todos.isEmpty ? 2 : todos.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: NepaliCalendarWidget(),
+                );
+              }
+              if (index == 1 && todos.isEmpty) {
+                return const Padding(
                   padding: EdgeInsets.only(top: 48),
                   child: EmptyState(),
-                )
-              else
-                ...todos.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final todo = entry.value;
-                  return AnimatedSlide(
-                    // Keep each task's element attached to its id when the
-                    // priority/date sort changes and cards move positions.
-                    key: ValueKey(todo.id ?? todo.createdAt.toIso8601String()),
-                    offset: Offset.zero,
-                    duration: Duration(milliseconds: 300 + (index * 50)),
-                    child: AnimatedOpacity(
-                      opacity: 1.0,
-                      duration: Duration(milliseconds: 300 + (index * 50)),
-                      child: TodoCard(
-                        todo: todo,
-                        onToggle: () => _toggleTodo(todo),
-                        onEdit: () => _navigateToAddEdit(context, todo: todo),
-                        onDelete: () => _showDeleteDialog(context, todo.id!),
-                      ),
-                    ),
-                  );
-                }).toList(),
-            ],
+                );
+              }
+              final todoIndex = todos.isEmpty ? index - 2 : index - 1;
+              final todo = todos[todoIndex];
+              return _AnimatedTodoItem(
+                key: ValueKey(todo.id ?? todo.createdAt.toIso8601String()),
+                index: todoIndex,
+                todo: todo,
+                onToggle: () => _toggleTodo(todo),
+                onEdit: () => _navigateToAddEdit(context, todo: todo),
+                onDelete: () => _showDeleteDialog(context, todo.id!),
+              );
+            },
           ),
         );
       },
@@ -550,8 +543,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await context.read<TodoProvider>().deleteTodo(id);
-              if (!mounted) return;
+              final provider = context.read<TodoProvider>();
+              await provider.deleteTodo(id);
+              if (!context.mounted) return;
               AppFeedback.success(context, 'Task deleted successfully');
             },
             style: ElevatedButton.styleFrom(
@@ -570,5 +564,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _searchController.dispose();
     _fabController.dispose();
     super.dispose();
+  }
+}
+
+/// Separate widget to avoid rebuilding the entire list when animating
+/// individual items. Uses [ListView.builder] for lazy rendering.
+class _AnimatedTodoItem extends StatelessWidget {
+  final int index;
+  final Todo todo;
+  final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _AnimatedTodoItem({
+    super.key,
+    required this.index,
+    required this.todo,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      key: ValueKey(todo.id ?? todo.createdAt.toIso8601String()),
+      offset: Offset.zero,
+      duration: Duration(milliseconds: 300 + (index * 50)),
+      child: AnimatedOpacity(
+        opacity: 1.0,
+        duration: Duration(milliseconds: 300 + (index * 50)),
+        child: TodoCard(
+          todo: todo,
+          onToggle: onToggle,
+          onEdit: onEdit,
+          onDelete: onDelete,
+        ),
+      ),
+    );
   }
 }

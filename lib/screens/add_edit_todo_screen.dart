@@ -1626,7 +1626,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.file(
-                      File(imagePath!),
+                      File(imagePath),
                       width: 92,
                       height: 92,
                       fit: BoxFit.cover,
@@ -1950,6 +1950,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
         await provider.addTodo(todo);
       }
     } catch (_) {
+      if (!mounted) return;
       AppFeedback.error(
         context,
         'Could not save task. Please try again.',

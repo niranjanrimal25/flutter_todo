@@ -67,7 +67,7 @@ class _TodoCalendarViewState extends State<TodoCalendarView> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.calendar_month_rounded,
                 color: AppColors.primary,
                 size: 20,

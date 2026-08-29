@@ -193,6 +193,7 @@ class _RingScreenState extends State<RingScreen> {
     }
 
     if (alarm == null) return;
+    if (!mounted) return;
     await context.read<AlarmProvider>().handleAlarmStopped(alarm);
   }
 

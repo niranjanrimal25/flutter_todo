@@ -75,7 +75,7 @@ class AppTheme {
       canvasColor: AppColors.darkCard,
       dividerTheme:
           DividerThemeData(color: Colors.white.withValues(alpha: 0.08)),
-      dialogTheme: DialogThemeData(
+      dialogTheme: const DialogThemeData(
         backgroundColor: AppColors.darkCard,
         surfaceTintColor: Colors.transparent,
       ),

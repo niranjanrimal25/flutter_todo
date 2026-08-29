@@ -179,7 +179,7 @@ class Todo {
     final nextStatus = status ??
         (isCompleted == null
             ? this.status
-            : isCompleted!
+            : isCompleted
                 ? TodoStatus.done
                 : TodoStatus.todo);
 

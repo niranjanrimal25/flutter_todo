@@ -198,8 +198,8 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        _PulseRing(
-                          duration: const Duration(milliseconds: 1800),
+                        const _PulseRing(
+                          duration: Duration(milliseconds: 1800),
                         ),
                         ScaleTransition(
                           scale: _logoScale,

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
@@ -368,7 +370,7 @@ void main() {
     });
 
     test('round-trips a paused timer with remaining seconds', () {
-      final state =
+      const state =
           TimerState(pausedRemainingSeconds: 420, totalSeconds: 600);
 
       final restored =

@@ -118,7 +118,7 @@ class _NepaliCalendarWidgetState extends State<NepaliCalendarWidget> {
             ),
           ),
           const Spacer(),
-          Text(
+          const Text(
             'विस्तार गर्नुहोस्',
             style: TextStyle(
               fontSize: 12,
