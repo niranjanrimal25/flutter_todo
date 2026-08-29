@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isSearching = false;
   _HomeViewMode _viewMode = _HomeViewMode.list;
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
   late AnimationController _fabController;
   late Animation<double> _fabAnimation;
 
@@ -127,7 +130,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           .join();
     }
 
-    return Padding(
+    return RepaintBoundary(
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -265,25 +269,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
+      ),
     );
   }
 
   Widget _buildStatsRow(bool isDark) {
-    return Consumer<TodoProvider>(
-      builder: (context, provider, _) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Row(
-            children: [
-              _buildStatCard('Total', provider.totalCount.toString(),
-                  Icons.list_alt_rounded, AppColors.primary, isDark),
-              const SizedBox(width: 12),
-              _buildStatCard('Pending', provider.pendingCount.toString(),
-                  Icons.pending_actions_rounded, AppColors.warning, isDark),
-              const SizedBox(width: 12),
-              _buildStatCard('Done', provider.completedCount.toString(),
-                  Icons.task_alt_rounded, AppColors.success, isDark),
-            ],
+    return Selector<TodoProvider, (int, int, int)>(
+      selector: (_, p) => (p.totalCount, p.pendingCount, p.completedCount),
+      builder: (context, counts, _) {
+        final (total, pending, completed) = counts;
+        return RepaintBoundary(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              children: [
+                _buildStatCard('Total', total.toString(),
+                    Icons.list_alt_rounded, AppColors.primary, isDark),
+                const SizedBox(width: 12),
+                _buildStatCard('Pending', pending.toString(),
+                    Icons.pending_actions_rounded, AppColors.warning, isDark),
+                const SizedBox(width: 12),
+                _buildStatCard('Done', completed.toString(),
+                    Icons.task_alt_rounded, AppColors.success, isDark),
+              ],
+            ),
           ),
         );
       },
@@ -405,7 +414,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: TextField(
             controller: _searchController,
             autofocus: true,
-            onChanged: (value) => context.read<TodoProvider>().search(value),
+            onChanged: (value) {
+              _searchDebounce?.cancel();
+              _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                if (mounted) context.read<TodoProvider>().search(value);
+              });
+            },
             decoration: InputDecoration(
               hintText: 'Search tasks...',
               prefixIcon:
@@ -561,6 +575,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _fabController.dispose();
     super.dispose();
@@ -587,20 +602,11 @@ class _AnimatedTodoItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSlide(
-      key: ValueKey(todo.id ?? todo.createdAt.toIso8601String()),
-      offset: Offset.zero,
-      duration: Duration(milliseconds: 300 + (index * 50)),
-      child: AnimatedOpacity(
-        opacity: 1.0,
-        duration: Duration(milliseconds: 300 + (index * 50)),
-        child: TodoCard(
-          todo: todo,
-          onToggle: onToggle,
-          onEdit: onEdit,
-          onDelete: onDelete,
-        ),
-      ),
+    return TodoCard(
+      todo: todo,
+      onToggle: onToggle,
+      onEdit: onEdit,
+      onDelete: onDelete,
     );
   }
 }

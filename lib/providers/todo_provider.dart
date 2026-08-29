@@ -12,24 +12,36 @@ class TodoProvider extends ChangeNotifier {
   TodoFilter _currentFilter = TodoFilter.all;
   String _searchQuery = '';
 
+  // Cached derived values — invalidated on every notifyListeners call.
+  List<Todo>? _filteredCache;
+  int? _totalCountCache;
+  int? _completedCountCache;
+  int? _pendingCountCache;
+
+  @override
+  void notifyListeners() {
+    _filteredCache = null;
+    _totalCountCache = null;
+    _completedCountCache = null;
+    _pendingCountCache = null;
+    super.notifyListeners();
+  }
+
   /// Todos in the order they should appear in the task list.
-  ///
-  /// This is calculated when the list is read rather than only when a todo is
-  /// added. That keeps the ordering correct after an edit changes either the
-  /// priority or the creation date, as long as the provider notifies its
-  /// listeners (which all provider mutations do).
-  List<Todo> get todos => _filteredTodos;
+  List<Todo> get todos => _filteredCache ??= _computeFilteredTodos();
   List<Todo> get allTodos => sortTodos(_todos);
   TodoFilter get currentFilter => _currentFilter;
 
-  // Stats
-  int get totalCount => _todos.length;
-  int get completedCount => _todos.where((t) => t.isCompleted).length;
-  int get pendingCount => _todos.where((t) => !t.isCompleted).length;
+  // Stats — computed once per notification cycle, not on every getter call.
+  int get totalCount => _totalCountCache ??= _todos.length;
+  int get completedCount =>
+      _completedCountCache ??= _todos.where((t) => t.isCompleted).length;
+  int get pendingCount =>
+      _pendingCountCache ??= _todos.where((t) => !t.isCompleted).length;
   int get todayCount =>
       _todos.where((t) => t.dueDate != null && _isToday(t.dueDate!)).length;
 
-  List<Todo> get _filteredTodos {
+  List<Todo> _computeFilteredTodos() {
     List<Todo> filtered = List.from(_todos);
 
     // Apply search

@@ -551,10 +551,15 @@ class _AlarmTabState extends State<_AlarmTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AlarmProvider>(
-      builder: (context, provider, _) {
-        final alarms = provider.alarms;
-
+    return Selector<AlarmProvider, List<Alarm>>(
+      selector: (_, p) => p.alarms,
+      shouldRebuild: (prev, next) => prev.length != next.length ||
+          prev.any((a) => !next.any((b) =>
+              b.id == a.id &&
+              b.isEnabled == a.isEnabled &&
+              b.hour == a.hour &&
+              b.minute == a.minute)),
+      builder: (context, alarms, _) {
         return ListView(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           children: [
@@ -757,8 +762,12 @@ class _TimerTabState extends State<_TimerTab> {
   static const String _stateKey = 'timer_state';
 
   int _totalSeconds = 300;
-  int _remainingSeconds = 300;
+  // ValueNotifier so per-second ticks only rebuild the small display widget,
+  // not the preset chips and control buttons.
+  late final ValueNotifier<int> _remainingNotifier;
   Timer? _ticker;
+
+  int get _remainingSeconds => _remainingNotifier.value;
 
   bool get _isRunning => _ticker != null;
 
@@ -771,6 +780,7 @@ class _TimerTabState extends State<_TimerTab> {
   @override
   void initState() {
     super.initState();
+    _remainingNotifier = ValueNotifier(_totalSeconds);
     _restoreTimerState();
   }
 
@@ -786,10 +796,8 @@ class _TimerTabState extends State<_TimerTab> {
     if (saved.isRunning && saved.endTime!.isAfter(now)) {
       final remaining = saved.endTime!.difference(now).inSeconds;
       if (!mounted) return;
-      setState(() {
-        _totalSeconds = saved.totalSeconds;
-        _remainingSeconds = remaining;
-      });
+      setState(() => _totalSeconds = saved.totalSeconds);
+      _remainingNotifier.value = remaining;
       _startTicker();
       // Re-show the chronometer notification with the same end time so the
       // countdown stays in sync.
@@ -801,26 +809,25 @@ class _TimerTabState extends State<_TimerTab> {
       NotificationService.cancelTimerRunning();
       await StorageService.deleteAppState(_stateKey);
       if (!mounted) return;
-      setState(() {
-        _totalSeconds = saved.totalSeconds;
-        _remainingSeconds = 0;
-      });
+      setState(() => _totalSeconds = saved.totalSeconds);
+      _remainingNotifier.value = 0;
     } else if (saved.isPaused) {
       if (!mounted) return;
-      setState(() {
-        _totalSeconds = saved.totalSeconds;
-        _remainingSeconds = saved.pausedRemainingSeconds ?? saved.totalSeconds;
-      });
+      setState(() => _totalSeconds = saved.totalSeconds);
+      _remainingNotifier.value =
+          saved.pausedRemainingSeconds ?? saved.totalSeconds;
     }
   }
 
   void _startTicker() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_remainingSeconds <= 1) {
+      if (_remainingNotifier.value <= 1) {
         _finish();
       } else {
-        setState(() => _remainingSeconds--);
+        // Only the ValueListenableBuilder for the display rebuilds — NOT the
+        // preset chips or control buttons.
+        _remainingNotifier.value--;
       }
     });
   }
@@ -867,7 +874,8 @@ class _TimerTabState extends State<_TimerTab> {
     AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
     _clearState();
-    setState(() => _remainingSeconds = _totalSeconds);
+    _remainingNotifier.value = _totalSeconds;
+    setState(() {});
     AppFeedback.success(context, 'Timer cancelled successfully');
   }
 
@@ -876,7 +884,8 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker = null;
     NotificationService.cancelTimerRunning();
     _clearState();
-    setState(() => _remainingSeconds = 0);
+    _remainingNotifier.value = 0;
+    setState(() {});
     // The alarm plugin's full-screen ring takes over from here (opened via
     // Alarm.ringing in main.dart), so no local snackbar is needed.
   }
@@ -887,10 +896,8 @@ class _TimerTabState extends State<_TimerTab> {
     AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
     _clearState();
-    setState(() {
-      _totalSeconds = seconds;
-      _remainingSeconds = seconds;
-    });
+    setState(() => _totalSeconds = seconds);
+    _remainingNotifier.value = seconds;
   }
 
   Future<void> _pickCustomDuration() async {
@@ -984,6 +991,7 @@ class _TimerTabState extends State<_TimerTab> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _remainingNotifier.dispose();
     // If the timer is still running, LEAVE the end-of-timer alarm and the
     // chronometer notification alone — the timer must keep ringing even
     // after this screen (or the app) is disposed. Only clean up when stopped.
@@ -997,67 +1005,80 @@ class _TimerTabState extends State<_TimerTab> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final progress = _totalSeconds == 0
-        ? 0.0
-        : (_totalSeconds - _remainingSeconds) / _totalSeconds;
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       children: [
         const SizedBox(height: 8),
-        Center(
-          child: SizedBox(
-            width: 260,
-            height: 260,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 240,
-                  height: 240,
-                  child: CircularProgressIndicator(
-                    value: _isRunning || _remainingSeconds < _totalSeconds
-                        ? progress
-                        : 0,
-                    strokeWidth: 14,
-                    strokeCap: StrokeCap.round,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                    valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+        // ValueListenableBuilder isolates per-second rebuilds to only this
+        // widget — the preset chips and controls below are untouched.
+        RepaintBoundary(
+          child: ValueListenableBuilder<int>(
+            valueListenable: _remainingNotifier,
+            builder: (context, remaining, _) {
+              final progress = _totalSeconds == 0
+                  ? 0.0
+                  : (_totalSeconds - remaining) / _totalSeconds;
+              return Center(
+                child: SizedBox(
+                  width: 260,
+                  height: 260,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 240,
+                        height: 240,
+                        child: CircularProgressIndicator(
+                          value: _isRunning || remaining < _totalSeconds
+                              ? progress
+                              : 0,
+                          strokeWidth: 14,
+                          strokeCap: StrokeCap.round,
+                          backgroundColor:
+                              AppColors.primary.withValues(alpha: 0.12),
+                          valueColor:
+                              const AlwaysStoppedAnimation(AppColors.primary),
+                        ),
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _format(remaining),
+                            style: TextStyle(
+                              fontSize: 52,
+                              fontWeight: FontWeight.bold,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                              color: isDark
+                                  ? AppColors.darkTextPrimary
+                                  : AppColors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _isRunning
+                                ? 'Running…'
+                                : remaining == 0
+                                    ? 'Finished'
+                                    : 'Ready',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _isRunning
+                                  ? AppColors.primary
+                                  : AppColors.textGrey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _format(_remainingSeconds),
-                      style: TextStyle(
-                        fontSize: 52,
-                        fontWeight: FontWeight.bold,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        color: isDark
-                            ? AppColors.darkTextPrimary
-                            : AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _isRunning
-                          ? 'Running…'
-                          : _remainingSeconds == 0
-                              ? 'Finished'
-                              : 'Ready',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _isRunning
-                            ? AppColors.primary
-                            : AppColors.textGrey,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 28),
