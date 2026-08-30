@@ -199,109 +199,125 @@ class _RingScreenState extends State<RingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // SizedBox.expand forces the body to fill the full window regardless of
+    // how Android sizes the over-lock-screen full-screen intent window.
+    // DecoratedBox carries the gradient without creating extra size constraints.
+    // SafeArea is placed INSIDE so the gradient bleeds to screen edges while
+    // the interactive content avoids the status-bar / nav-bar cutouts.
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF2D3436), Color(0xFF1A1A2E)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: SizedBox.expand(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF2D3436), Color(0xFF1A1A2E)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                widget.isRecurringReminder
-                    ? Icons.notifications_active_rounded
-                    : widget.isAlarm
-                        ? Icons.alarm_rounded
-                        : Icons.timer_rounded,
-                size: 120,
-                color: widget.isRecurringReminder
-                    ? AppColors.primary
-                    : widget.isAlarm
-                        ? AppColors.danger
-                        : AppColors.primary,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                widget.isRecurringReminder
-                    ? '📋 TASK REMINDER'
-                    : widget.isAlarm
-                        ? '⏰ ALARM'
-                        : '⏱️ TIMER FINISHED',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
+          child: SafeArea(
+            child: Column(
+              // CrossAxisAlignment.center keeps buttons/icon centred without
+              // stretching them; the Column itself fills full width because
+              // SafeArea passes tight horizontal constraints from SizedBox.expand.
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                const Spacer(),
+                Icon(
+                  widget.isRecurringReminder
+                      ? Icons.notifications_active_rounded
+                      : widget.isAlarm
+                          ? Icons.alarm_rounded
+                          : Icons.timer_rounded,
+                  size: 120,
+                  color: widget.isRecurringReminder
+                      ? AppColors.primary
+                      : widget.isAlarm
+                          ? AppColors.danger
+                          : AppColors.primary,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 32),
-              // Pulsing "ringing" indicator.
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.0, end: 1.0),
-                duration: const Duration(milliseconds: 700),
-                builder: (context, value, child) {
-                  return Opacity(
-                    opacity: 0.5 + 0.5 * value,
-                    child: child,
-                  );
-                },
-                child: Text(
-                  '🔔 Ringing…',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 15,
+                const SizedBox(height: 24),
+                Text(
+                  widget.isRecurringReminder
+                      ? '📋 TASK REMINDER'
+                      : widget.isAlarm
+                          ? '⏰ ALARM'
+                          : '⏱️ TIMER FINISHED',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
                   ),
                 ),
-              ),
-              const Spacer(),
-              if (widget.isAlarm)
-                OutlinedButton.icon(
-                  onPressed: _snooze,
-                  icon: const Icon(Icons.bedtime_rounded),
-                  label: const Text('Snooze 5 min'),
-                  style: OutlinedButton.styleFrom(
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    _label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Pulsing "ringing" indicator.
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 700),
+                  builder: (context, value, child) {
+                    return Opacity(
+                      opacity: 0.5 + 0.5 * value,
+                      child: child,
+                    );
+                  },
+                  child: Text(
+                    '🔔 Ringing…',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (widget.isAlarm)
+                  OutlinedButton.icon(
+                    onPressed: _snooze,
+                    icon: const Icon(Icons.bedtime_rounded),
+                    label: const Text('Snooze 5 min'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white70),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _stop,
+                  icon: const Icon(Icons.stop_circle_rounded),
+                  label: const Text('Stop'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        widget.isAlarm ? AppColors.danger : AppColors.primary,
                     foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white70),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 14),
+                        horizontal: 48, vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
                 ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _stop,
-                icon: const Icon(Icons.stop_circle_rounded),
-                label: const Text('Stop'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      widget.isAlarm ? AppColors.danger : AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 48, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
