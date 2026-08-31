@@ -12,11 +12,10 @@ import '../widgets/todo_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/nepali_calendar_widget.dart';
-import '../widgets/todo_calendar_view.dart';
 import '../widgets/todo_kanban_view.dart';
 import 'add_edit_todo_screen.dart';
 
-enum _HomeViewMode { list, calendar, kanban }
+enum _HomeViewMode { list, kanban }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -60,8 +59,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     switch (mode) {
       case _HomeViewMode.list:
         return 'List';
-      case _HomeViewMode.calendar:
-        return 'Calendar';
       case _HomeViewMode.kanban:
         return 'Kanban';
     }
@@ -71,8 +68,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     switch (mode) {
       case _HomeViewMode.list:
         return Icons.view_list_rounded;
-      case _HomeViewMode.calendar:
-        return Icons.calendar_month_rounded;
       case _HomeViewMode.kanban:
         return Icons.view_kanban_rounded;
     }
@@ -94,7 +89,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Expanded(
               child: switch (_viewMode) {
                 _HomeViewMode.list => _buildTodoList(isDark),
-                _HomeViewMode.calendar => _buildCalendarView(),
                 _HomeViewMode.kanban => _buildKanbanView(),
               },
             ),
@@ -442,14 +436,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildCalendarView() {
-    return TodoCalendarView(
-      onToggle: _toggleTodo,
-      onEdit: (todo) => _navigateToAddEdit(context, todo: todo),
-      onDelete: (todo) => _showDeleteDialog(context, todo.id!),
     );
   }
 

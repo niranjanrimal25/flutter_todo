@@ -18,7 +18,6 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🇳🇵 Nepali dates shown in Devanagari digits and month names
 - 🏷️ Priorities (Low / Medium / High), categories, and search
 - 🔎 Filter tasks: All / Today / Completed / Pending
-- 📅 Calendar view with due-date priority markers, month swiping, Today jump, and selected-day task cards
 - 🧩 Kanban board with To Do / In Progress / Done columns and native long-press drag-and-drop
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
@@ -43,7 +42,7 @@ flutter test
 - `lib/providers/` — `TodoProvider`, `AlarmProvider`, `ThemeProvider`
 - `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
 - `lib/services/` — `storage_service.dart` (sqflite), `image_storage_service.dart`, `notification_service.dart`
-- `lib/widgets/` — todo cards, calendar and Kanban views, Nepali calendar widget, Nepali date picker dialog, empty state
+- `lib/widgets/` — todo cards, Kanban view, Nepali calendar widget, Nepali date picker dialog, empty state
 - `lib/utils/` — theme and shared constants
 
 ## Notes
@@ -56,14 +55,8 @@ flutter test
 - Subtasks are stored as JSON in the todo row so existing installations can
   migrate in place. A task card shows checklist progress, while the add/edit
   screen provides add, edit, delete, and completion controls.
-- The Home app-bar view button opens the List / Calendar / Kanban selector. The
-  Calendar option is a Gregorian `table_calendar` month grid: due days show one
-  dot per priority (or the highest-priority dot when space is limited), and
-  selecting a day shows that day's already-priority-sorted task cards below.
-  The selected day also shows its BS/Nepali date because the app's due-date
-  picker remains Nepali-aware; the grid itself stays Gregorian because
-  `table_calendar` is a Gregorian month-grid widget.
-- Kanban uses Flutter's native `LongPressDraggable` and `DragTarget` widgets,
+- The Home app-bar view button opens the List / Kanban selector. Kanban uses
+  Flutter's native `LongPressDraggable` and `DragTarget` widgets,
   so it does not add a board package or a second ordering system. Columns group
   by `TodoStatus` while each column keeps the existing priority/newest order;
   List view continues to use priority sorting independently. Dropping a task
