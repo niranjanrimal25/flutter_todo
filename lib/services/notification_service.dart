@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
+import '../models/habit.dart';
 import '../models/todo.dart';
 import 'alarm_scheduler.dart';
 
@@ -254,6 +255,96 @@ class NotificationService {
   /// Backwards-compatible name for callers of the old one-shot API.
   static Future<void> scheduleNotification(Todo todo) =>
       scheduleRecurringReminder(todo);
+
+  // ===== Habit reminders =====
+
+  /// Keeps a rolling 30-day window of one-shot daily habit reminders. A
+  /// rolling window lets the provider cancel today's reminder as soon as the
+  /// habit is completed, then put the next reminder window back in place.
+  /// Startup and every habit toggle refresh the window so it stays indefinite.
+  static Future<void> scheduleHabitReminders(
+    Habit habit, {
+    required Set<DateTime> completedDates,
+  }) async {
+    if (habit.id == null || !habit.hasReminder) return;
+
+    try {
+      await initialize();
+    } catch (error) {
+      debugPrint('Habit notifications are unavailable: $error');
+      return;
+    }
+    await cancelHabitReminders(habit.id!);
+
+    final now = tz.TZDateTime.now(tz.local);
+    for (var slot = 0; slot < 30; slot++) {
+      final date = now.add(Duration(days: slot));
+      final day = DateTime(date.year, date.month, date.day);
+      // A completed habit skips today's notification. Future days have no
+      // completion yet, so they remain scheduled in the rolling window.
+      if (slot == 0 && completedDates.contains(day)) continue;
+
+      final scheduled = tz.TZDateTime(
+        tz.local,
+        date.year,
+        date.month,
+        date.day,
+        habit.reminderHour!,
+        habit.reminderMinute!,
+      );
+      if (!scheduled.isAfter(now)) continue;
+
+      try {
+        await _notifications.zonedSchedule(
+          id: habitReminderNotificationId(habit.id!, slot),
+          title: '🌱 ${habit.title}',
+          body: 'Time to check in on your habit.',
+          scheduledDate: scheduled,
+          notificationDetails: const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'habit_reminders',
+              'Habit Reminders',
+              channelDescription: 'Daily reminders for habits',
+              importance: Importance.defaultImportance,
+              priority: Priority.defaultPriority,
+              icon: '@mipmap/ic_launcher',
+              playSound: true,
+              enableVibration: true,
+              category: AndroidNotificationCategory.reminder,
+            ),
+            iOS: DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: 'habit:${habit.id}',
+        );
+      } catch (error) {
+        debugPrint('Habit reminder scheduling failed: $error');
+      }
+    }
+  }
+
+  static int habitReminderNotificationId(int habitId, int slot) =>
+      400000 + habitId * 32 + slot;
+
+  static Future<void> cancelHabitReminders(int habitId) async {
+    try {
+      await _waitForInitialization();
+    } catch (error) {
+      debugPrint('Habit notifications are unavailable: $error');
+      return;
+    }
+    for (var slot = 0; slot < 30; slot++) {
+      try {
+        await cancelNotification(habitReminderNotificationId(habitId, slot));
+      } catch (error) {
+        debugPrint('Habit reminder cancellation failed: $error');
+      }
+    }
+  }
 
   // ===== Running-timer chronometer =====
 

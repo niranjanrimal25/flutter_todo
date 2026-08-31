@@ -1,12 +1,14 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import '../models/habit.dart';
+import '../models/habit_log.dart';
 import '../models/todo.dart';
 import '../models/alarm.dart';
 
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 10;
+  static const int _dbVersion = 11;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -56,6 +58,7 @@ class StorageService {
           )
         ''');
         await _createAppStateTable(db);
+        await _createHabitsTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -131,6 +134,9 @@ class StorageService {
             UPDATE todos SET updatedAt = createdAt WHERE updatedAt IS NULL
           ''');
         }
+        if (oldVersion < 11) {
+          await _createHabitsTables(db);
+        }
       },
     );
   }
@@ -140,6 +146,30 @@ class StorageService {
       CREATE TABLE app_state(
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _createHabitsTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE habits(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        icon TEXT,
+        colorValue INTEGER,
+        reminderHour INTEGER,
+        reminderMinute INTEGER
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE habit_logs(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        habitId INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(habitId, date),
+        FOREIGN KEY(habitId) REFERENCES habits(id) ON DELETE CASCADE
       )
     ''');
   }
@@ -189,6 +219,50 @@ class StorageService {
       'todos',
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  // ===== Habits =====
+
+  static Future<int> insertHabit(Habit habit) async {
+    final db = await database;
+    return db.insert('habits', habit.toMap());
+  }
+
+  static Future<List<Habit>> getAllHabits() async {
+    final db = await database;
+    final maps = await db.query('habits', orderBy: 'createdAt ASC, id ASC');
+    return maps.map(Habit.fromMap).toList();
+  }
+
+  static Future<int> updateHabit(Habit habit) async {
+    final db = await database;
+    return db.update(
+      'habits',
+      habit.toMap(),
+      where: 'id = ?',
+      whereArgs: [habit.id],
+    );
+  }
+
+  static Future<int> deleteHabit(int id) async {
+    final db = await database;
+    await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
+    return db.delete('habits', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<List<HabitLog>> getAllHabitLogs() async {
+    final db = await database;
+    final maps = await db.query('habit_logs', orderBy: 'date ASC, id ASC');
+    return maps.map(HabitLog.fromMap).toList();
+  }
+
+  static Future<int> upsertHabitLog(HabitLog log) async {
+    final db = await database;
+    return db.insert(
+      'habit_logs',
+      log.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 

@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 
 import 'package:todo_app/models/alarm.dart';
+import 'package:todo_app/models/habit.dart';
+import 'package:todo_app/models/habit_log.dart';
 import 'package:todo_app/models/alarm_tone.dart';
 import 'package:todo_app/models/subtask.dart';
 import 'package:todo_app/models/timer_state.dart';
@@ -209,6 +211,49 @@ void main() {
       );
       // Sorting must not mutate the provider's source list.
       expect(todos.first.title, 'Old high');
+    });
+  });
+
+  group('Habit model', () {
+    test('habit and daily log round-trip preserve fields', () {
+      final habit = Habit(
+        id: 4,
+        title: 'Daily exercise',
+        createdAt: DateTime(2026, 8, 1, 7, 30),
+        icon: 'fitness',
+        colorValue: AppColors.success.value,
+        reminderHour: 6,
+        reminderMinute: 45,
+      );
+      final log = HabitLog(
+        id: 8,
+        habitId: 4,
+        date: DateTime(2026, 8, 24, 19),
+        completed: true,
+      );
+
+      final restoredHabit = Habit.fromMap(habit.toMap());
+      final restoredLog = HabitLog.fromMap(log.toMap());
+
+      expect(restoredHabit.id, 4);
+      expect(restoredHabit.title, 'Daily exercise');
+      expect(restoredHabit.icon, 'fitness');
+      expect(restoredHabit.colorValue, AppColors.success.value);
+      expect(restoredHabit.reminderHour, 6);
+      expect(restoredHabit.reminderMinute, 45);
+      expect(restoredLog.id, 8);
+      expect(restoredLog.habitId, 4);
+      expect(restoredLog.date, DateTime(2026, 8, 24));
+      expect(restoredLog.completed, isTrue);
+    });
+
+    test('habit log normalizes the stored date to a day', () {
+      final log = HabitLog(
+        habitId: 2,
+        date: DateTime(2026, 8, 25, 23, 59),
+      );
+
+      expect(log.date, DateTime(2026, 8, 25));
     });
   });
 

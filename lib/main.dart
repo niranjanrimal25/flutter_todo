@@ -8,6 +8,7 @@ import 'package:nepali_utils/nepali_utils.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/alarm_provider.dart';
+import 'providers/habit_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/todo_provider.dart';
 import 'screens/main_shell.dart';
@@ -161,6 +162,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => TodoProvider()),
         ChangeNotifierProvider(create: (_) => AlarmProvider()),
+        ChangeNotifierProvider(create: (_) => HabitProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(

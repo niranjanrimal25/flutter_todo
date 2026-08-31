@@ -19,6 +19,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🏷️ Priorities (Low / Medium / High), categories, and search
 - 🔎 Filter tasks: All / Today / Completed / Pending
 - 🧩 Kanban board with To Do / In Progress / Done columns and native long-press drag-and-drop
+- 🌱 Habits section with streaks, 14-day heatmaps, monthly history, and daily reminders
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
@@ -39,9 +40,9 @@ flutter test
 
 ## Project structure
 
-- `lib/models/` — `todo.dart`, `subtask.dart`, and `alarm.dart` with SQLite (de)serialization
-- `lib/providers/` — `TodoProvider`, `AlarmProvider`, `ThemeProvider`
-- `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
+- `lib/models/` — `todo.dart`, `subtask.dart`, `habit.dart`, `habit_log.dart`, and `alarm.dart` with SQLite (de)serialization
+- `lib/providers/` — `TodoProvider`, `HabitProvider`, `AlarmProvider`, `ThemeProvider`
+- `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `habits_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
 - `lib/services/` — `storage_service.dart` (sqflite), `firebase_sync_service.dart`, `image_storage_service.dart`, `notification_service.dart`
 - `lib/widgets/` — todo cards, Kanban view, Nepali calendar widget, Nepali date picker dialog, empty state
 - `lib/utils/` — theme and shared constants
@@ -56,6 +57,17 @@ flutter test
 - Subtasks are stored as JSON in the todo row so existing installations can
   migrate in place. A task card shows checklist progress, while the add/edit
   screen provides add, edit, delete, and completion controls.
+- Habits are intentionally separate from tasks and alarms. SQLite schema
+  version 11 adds `habits` and `habit_logs`, with one unique log per habit/day.
+  The Habits tab provides quick today toggles, a 14-day heatmap, current and
+  longest streaks, all-time completion totals, and a full tappable
+  `table_calendar` month grid. Marking a day is optimistic for an instant UI
+  update and rolls back if the
+  local write fails.
+- Habit reminders use a rolling 30-day set of one-shot local notifications so
+  completing today cancels today's reminder while future reminders remain
+  scheduled. The window is refreshed at startup and whenever a habit day is
+  toggled. Reminders are local to each device and do not require cloud sync.
 - The Home app-bar view button opens the List / Kanban selector. Kanban uses
   Flutter's native `LongPressDraggable` and `DragTarget` widgets,
   so it does not add a board package or a second ordering system. Columns group

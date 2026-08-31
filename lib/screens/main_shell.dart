@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/todo_provider.dart';
 import '../providers/alarm_provider.dart';
+import '../providers/habit_provider.dart';
 import '../services/notification_navigation.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'alarm_timer_screen.dart';
+import 'habits_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -38,6 +40,7 @@ class _MainShellState extends State<MainShell> {
       await Future.wait<void>([
         context.read<TodoProvider>().loadTodos(),
         context.read<AlarmProvider>().loadAlarms(),
+        context.read<HabitProvider>().loadHabits(),
         minimumSplash,
       ]);
     } catch (_) {
@@ -108,6 +111,7 @@ class _MainShellState extends State<MainShell> {
           children: const [
             HomeScreen(),
             AlarmTimerScreen(),
+            HabitsScreen(),
           ],
         ),
       ),
@@ -134,6 +138,12 @@ class _MainShellState extends State<MainShell> {
               selectedIcon:
                   Icon(Icons.alarm_rounded, color: AppColors.primary),
               label: 'Alarm & Timer',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.local_florist_rounded),
+              selectedIcon:
+                  Icon(Icons.local_florist_rounded, color: AppColors.primary),
+              label: 'Habits',
             ),
           ],
         ),
