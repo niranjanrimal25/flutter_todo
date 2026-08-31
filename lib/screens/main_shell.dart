@@ -28,15 +28,22 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _loadData() async {
     // Only the local SQLite reads are awaited here. They run after runApp,
-    // while the Flutter loading screen is already visible, and no artificial
-    // delay keeps the splash on screen once the data is ready.
+    // while the Flutter loading screen is already visible. The small minimum
+    // display time prevents a fast database read from producing a one-frame
+    // flash, while a slow read still determines the real startup duration.
+    final minimumSplash = Future<void>.delayed(
+      const Duration(milliseconds: 850),
+    );
     try {
-      await Future.wait([
+      await Future.wait<void>([
         context.read<TodoProvider>().loadTodos(),
         context.read<AlarmProvider>().loadAlarms(),
+        minimumSplash,
       ]);
     } catch (_) {
-      // Data loading must never block the UI — show the app anyway.
+      // Data loading must never block the UI — show the app anyway, but keep
+      // the branded handoff smooth when the local database reports an error.
+      await minimumSplash;
     }
     if (!mounted) return;
     setState(() => _loaded = true);
@@ -68,7 +75,10 @@ class _MainShellState extends State<MainShell> {
               opacity: _loaded ? 0 : 1,
               duration: const Duration(milliseconds: 500),
               curve: Curves.easeOut,
-              child: const _AnimatedAppSplash(),
+              child: TickerMode(
+                enabled: !_loaded,
+                child: const _AnimatedAppSplash(),
+              ),
             ),
           ),
         ),
@@ -145,22 +155,55 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
     with TickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(milliseconds: 1300),
   )..forward();
   late final AnimationController _spinnerController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1200),
   )..repeat();
 
-  late final Animation<double> _logoScale = CurvedAnimation(
+  // A restrained ease-out entrance avoids the visible bounce of an elastic
+  // curve while still giving the logo a little lift off the native splash.
+  late final Animation<double> _logoScale = Tween<double>(
+    begin: 0.82,
+    end: 1.0,
+  ).animate(
+    CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+    ),
+  );
+  late final Animation<double> _logoFade = CurvedAnimation(
     parent: _controller,
-    curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
+    curve: const Interval(0.0, 0.35, curve: Curves.easeOut),
+  );
+  late final Animation<Offset> _logoSlide = Tween<Offset>(
+    begin: const Offset(0, 0.08),
+    end: Offset.zero,
+  ).animate(
+    CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+    ),
   );
   late final Animation<double> _textFade = CurvedAnimation(
     parent: _controller,
-    curve: const Interval(0.35, 0.85, curve: Curves.easeOut),
+    curve: const Interval(0.28, 0.72, curve: Curves.easeOut),
+  );
+  late final Animation<Offset> _textSlide = Tween<Offset>(
+    begin: const Offset(0, 0.12),
+    end: Offset.zero,
+  ).animate(
+    CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.28, 0.72, curve: Curves.easeOutCubic),
+    ),
   );
   late final Animation<double> _subtitleFade = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.48, 0.9, curve: Curves.easeOut),
+  );
+  late final Animation<double> _spinnerFade = CurvedAnimation(
     parent: _controller,
     curve: const Interval(0.55, 1.0, curve: Curves.easeOut),
   );
@@ -201,14 +244,20 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
                         const _PulseRing(
                           duration: Duration(milliseconds: 1800),
                         ),
-                        ScaleTransition(
-                          scale: _logoScale,
-                          child: Image.asset(
-                            'assets/images/splash_logo.png',
-                            width: 96,
-                            height: 96,
-                            fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
+                        FadeTransition(
+                          opacity: _logoFade,
+                          child: SlideTransition(
+                            position: _logoSlide,
+                            child: ScaleTransition(
+                              scale: _logoScale,
+                              child: Image.asset(
+                                'assets/images/splash_logo.png',
+                                width: 96,
+                                height: 96,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -217,14 +266,17 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
                   const SizedBox(height: 28),
                   FadeTransition(
                     opacity: _textFade,
-                    child: const Text(
-                      'Niranjan Todo',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
+                    child: SlideTransition(
+                      position: _textSlide,
+                      child: const Text(
+                        'Niranjan Todo',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ),
@@ -242,14 +294,21 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
                     ),
                   ),
                   const SizedBox(height: 48),
-                  AnimatedBuilder(
-                    animation: _spinnerController,
-                    builder: (context, _) {
-                      return CustomPaint(
-                        size: const Size.square(34),
-                        painter: _LoadingArcPainter(_spinnerController.value),
-                      );
-                    },
+                  FadeTransition(
+                    opacity: _spinnerFade,
+                    child: AnimatedBuilder(
+                      animation: _spinnerController,
+                      builder: (context, _) {
+                        return RepaintBoundary(
+                          child: CustomPaint(
+                            size: const Size.square(34),
+                            painter: _LoadingArcPainter(
+                              _spinnerController.value,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
