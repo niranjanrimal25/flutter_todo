@@ -22,6 +22,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
+- ☁️ Optional private Firebase sync between Android and iPhone using the same account
 
 ## Getting Started
 
@@ -41,7 +42,7 @@ flutter test
 - `lib/models/` — `todo.dart`, `subtask.dart`, and `alarm.dart` with SQLite (de)serialization
 - `lib/providers/` — `TodoProvider`, `AlarmProvider`, `ThemeProvider`
 - `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
-- `lib/services/` — `storage_service.dart` (sqflite), `image_storage_service.dart`, `notification_service.dart`
+- `lib/services/` — `storage_service.dart` (sqflite), `firebase_sync_service.dart`, `image_storage_service.dart`, `notification_service.dart`
 - `lib/widgets/` — todo cards, Kanban view, Nepali calendar widget, Nepali date picker dialog, empty state
 - `lib/utils/` — theme and shared constants
 
@@ -65,8 +66,36 @@ flutter test
 - `Todo.status` is intentionally separate from `isCompleted`: In Progress is
   useful for active work, while the legacy boolean remains available to the
   existing filters and reminder code. SQLite schema version 9 adds the
-  `status` column. During the migration, existing rows with `isCompleted = 1`
-  become Done and all other rows become To Do; no saved tasks are discarded.
+  `status` column and version 10 adds stable sync identity/timestamps. During
+  the migration, existing rows with `isCompleted = 1` become Done and all
+  other rows become To Do; no saved tasks are discarded.
+- Firebase sync is optional and keeps SQLite as the offline-first source for
+  the UI. To enable private Android/iPhone sync, create a Firebase project,
+  add the Android package `com.example.todo_app` and the iOS bundle id
+  `com.example.todoApp`, enable Email/Password Authentication, and run:
+
+  ```bash
+  dart pub global activate flutterfire_cli
+  flutterfire configure
+  flutter pub get
+  ```
+
+  The Firebase native configuration files are project-specific and should not
+  be copied from another project. After selecting the Firebase project in the
+  Firebase CLI, deploy the included rules with
+  `firebase deploy --only firestore:rules`, or paste `firestore.rules` into the
+  Firestore Rules editor. On both phones,
+  tap the cloud button in Home and sign in with the same email/password. New
+  and edited tasks sync automatically, existing sessions sync on startup, and
+  open apps receive remote task changes in real time. Cloud writes use a
+  per-task `syncId` and last-updated timestamp, so local SQLite ids never
+  collide between devices.
+- The cloud sync intentionally shares task fields, priorities, due dates,
+  status, completion, reminders, categories, and subtasks. Image attachments
+  and imported custom reminder-tone files remain device-local because their
+  filesystem paths are not valid on the other phone; built-in reminder tones
+  do sync. Firebase Storage can be added later if cross-device attachments
+  are needed.
 - `flutter_native_splash` is configured in `pubspec.yaml` with the branded
   purple background and logo. If native files need to be regenerated after a
   splash configuration change, run:

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../utils/constants.dart';
 import 'subtask.dart';
@@ -29,13 +30,20 @@ extension TodoStatusExtension on TodoStatus {
 class Todo {
   static const Object _imagePathUnset = Object();
 
+  static String _newSyncId() {
+    final random = math.Random();
+    return '${DateTime.now().microsecondsSinceEpoch}-${random.nextInt(1 << 32)}';
+  }
+
   int? id;
+  String syncId;
   String title;
   String description;
   bool isCompleted;
   TodoStatus status;
   Priority priority;
   DateTime createdAt;
+  DateTime updatedAt;
   DateTime? dueDate;
   /// Null means the recurring reminder is OFF. When non-null it stores the
   /// user-selected start time (the due date/time takes precedence as the
@@ -53,12 +61,14 @@ class Todo {
 
   Todo({
     this.id,
+    String? syncId,
     required this.title,
     this.description = '',
     bool? isCompleted,
     TodoStatus? status,
     this.priority = Priority.medium,
     DateTime? createdAt,
+    DateTime? updatedAt,
     this.dueDate,
     this.reminderTime,
     int reminderIntervalHours = 2,
@@ -66,13 +76,15 @@ class Todo {
     this.category = 'General',
     this.imagePath,
     List<Subtask>? subtasks,
-  })  : isCompleted = status == TodoStatus.done ||
+  })  : syncId = syncId ?? _newSyncId(),
+        isCompleted = status == TodoStatus.done ||
             (status == null && isCompleted == true),
         status = status ??
             (isCompleted == true ? TodoStatus.done : TodoStatus.todo),
         reminderIntervalHours = reminderIntervalHours.clamp(1, 24).toInt(),
         subtasks = List<Subtask>.of(subtasks ?? const <Subtask>[]),
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? (createdAt ?? DateTime.now());
 
   bool get hasSubtasks => subtasks.isNotEmpty;
 
@@ -86,12 +98,14 @@ class Todo {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'syncId': syncId,
       'title': title,
       'description': description,
       'isCompleted': isCompleted ? 1 : 0,
       'status': status.index,
       'priority': priority.index,
       'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
       'dueDate': dueDate?.toIso8601String(),
       'reminderTime': reminderTime?.toIso8601String(),
       'reminderIntervalHours': reminderIntervalHours,
@@ -122,6 +136,12 @@ class Todo {
     }
   }
 
+  static DateTime? _dateFromStorage(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
   factory Todo.fromMap(Map<String, dynamic> map) {
     final completedValue = map['isCompleted'];
     final wasCompleted = completedValue is bool
@@ -133,15 +153,18 @@ class Todo {
             storedStatus < TodoStatus.values.length
         ? TodoStatus.values[storedStatus]
         : (wasCompleted ? TodoStatus.done : TodoStatus.todo);
+    final createdAt = _dateFromStorage(map['createdAt']) ?? DateTime.now();
 
     return Todo(
       id: map['id'] as int?,
+      syncId: map['syncId'] as String?,
       title: map['title'] as String,
       description: (map['description'] as String?) ?? '',
       isCompleted: wasCompleted,
       status: restoredStatus,
       priority: Priority.values[map['priority'] as int],
-      createdAt: DateTime.parse(map['createdAt'] as String),
+      createdAt: createdAt,
+      updatedAt: _dateFromStorage(map['updatedAt']) ?? createdAt,
       dueDate:
           map['dueDate'] != null ? DateTime.parse(map['dueDate'] as String) : null,
       reminderTime: map['reminderTime'] != null
@@ -159,12 +182,14 @@ class Todo {
 
   Todo copyWith({
     int? id,
+    String? syncId,
     String? title,
     String? description,
     bool? isCompleted,
     TodoStatus? status,
     Priority? priority,
     DateTime? createdAt,
+    DateTime? updatedAt,
     DateTime? dueDate,
     DateTime? reminderTime,
     int? reminderIntervalHours,
@@ -185,12 +210,14 @@ class Todo {
 
     return Todo(
       id: id ?? this.id,
+      syncId: syncId ?? this.syncId,
       title: title ?? this.title,
       description: description ?? this.description,
       isCompleted: isCompleted ?? this.isCompleted,
       status: nextStatus,
       priority: priority ?? this.priority,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       dueDate: dueDate ?? this.dueDate,
       reminderTime: reminderTime ?? this.reminderTime,
       reminderIntervalHours:

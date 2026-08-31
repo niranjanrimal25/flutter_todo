@@ -1917,6 +1917,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
 
     final todo = Todo(
       id: widget.todo?.id,
+      syncId: widget.todo?.syncId,
       title: _titleController.text.trim(),
       description: _descController.text.trim(),
       priority: _priority,
@@ -1932,6 +1933,7 @@ class _AddEditTodoScreenState extends State<AddEditTodoScreen>
       status: widget.todo?.status,
       isCompleted: widget.todo?.isCompleted ?? false,
       createdAt: widget.todo?.createdAt ?? DateTime.now(),
+      updatedAt: widget.todo?.updatedAt,
     );
 
     final provider = context.read<TodoProvider>();

@@ -7,6 +7,7 @@ import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
 import '../providers/todo_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/firebase_sync_service.dart';
 import '../utils/constants.dart';
 import '../widgets/todo_card.dart';
 import '../widgets/app_feedback.dart';
@@ -70,6 +71,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return Icons.view_list_rounded;
       case _HomeViewMode.kanban:
         return Icons.view_kanban_rounded;
+    }
+  }
+
+  IconData _syncIcon(CloudSyncState state) {
+    switch (state) {
+      case CloudSyncState.unavailable:
+        return Icons.cloud_off_rounded;
+      case CloudSyncState.signedOut:
+        return Icons.cloud_queue_rounded;
+      case CloudSyncState.syncing:
+        return Icons.cloud_sync_rounded;
+      case CloudSyncState.synced:
+        return Icons.cloud_done_rounded;
+      case CloudSyncState.error:
+        return Icons.cloud_off_rounded;
     }
   }
 
@@ -164,6 +180,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           Row(
             children: [
+              Consumer<TodoProvider>(
+                builder: (context, provider, _) {
+                  final state = provider.syncState;
+                  final color = state == CloudSyncState.synced
+                      ? AppColors.success
+                      : state == CloudSyncState.error
+                          ? AppColors.danger
+                          : AppColors.primary;
+                  return IconButton(
+                    tooltip: provider.syncStateLabel,
+                    onPressed: _showSyncDialog,
+                    icon: Icon(_syncIcon(state), color: color),
+                    style: IconButton.styleFrom(
+                      backgroundColor: color.withValues(alpha: 0.1),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
               Consumer<ThemeProvider>(
                 builder: (context, themeProvider, _) {
                   return AnimatedSwitcher(
@@ -437,6 +472,221 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  Future<void> _showSyncDialog() async {
+    final provider = context.read<TodoProvider>();
+    await provider.initializeSync();
+    if (!mounted) return;
+
+    final emailController = TextEditingController(text: provider.syncEmail);
+    final passwordController = TextEditingController();
+    var busy = false;
+    String? message;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              final isSignedIn = provider.isSyncSignedIn;
+              final syncState = provider.syncState;
+
+              Future<void> runAction(Future<void> Function() action) async {
+                if (busy) return;
+                setDialogState(() {
+                  busy = true;
+                  message = null;
+                });
+                try {
+                  await action();
+                  if (!context.mounted) return;
+                  setDialogState(() {
+                    message = 'Tasks synced successfully.';
+                  });
+                } catch (_) {
+                  if (!context.mounted) return;
+                  setDialogState(() {
+                    message = provider.syncError ??
+                        'Could not sync right now. Local tasks are safe.';
+                  });
+                } finally {
+                  if (context.mounted) setDialogState(() => busy = false);
+                }
+              }
+
+              final errorText = message ?? provider.syncError;
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: Row(
+                  children: [
+                    Icon(
+                      _syncIcon(syncState),
+                      color: syncState == CloudSyncState.error
+                          ? AppColors.danger
+                          : AppColors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    const Text('Sync tasks'),
+                  ],
+                ),
+                content: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: !provider.isSyncAvailable
+                      ? const Text(
+                          'Firebase is not configured for this build yet. '
+                          'Run flutterfire configure, then restart the app.',
+                        )
+                      : isSignedIn
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'This account syncs your tasks between your '
+                                  'Android and iPhone.',
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  provider.syncEmail ?? 'Signed in',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (errorText != null) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    errorText,
+                                    style: TextStyle(
+                                      color: syncState == CloudSyncState.error
+                                          ? AppColors.danger
+                                          : AppColors.success,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextField(
+                                  controller: emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Email',
+                                    prefixIcon: Icon(Icons.email_outlined),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: passwordController,
+                                  obscureText: true,
+                                  onSubmitted: (_) => runAction(
+                                    () => provider.signInToSync(
+                                      email: emailController.text,
+                                      password: passwordController.text,
+                                    ),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Password',
+                                    prefixIcon: Icon(Icons.lock_outline),
+                                  ),
+                                ),
+                                if (errorText != null) ...[
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      errorText,
+                                      style: const TextStyle(
+                                        color: AppColors.danger,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                ),
+                actions: !provider.isSyncAvailable
+                    ? [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Close'),
+                        ),
+                      ]
+                    : isSignedIn
+                        ? [
+                            TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => runAction(provider.syncNow),
+                              child: busy
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text('Sync now'),
+                            ),
+                            TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => runAction(
+                                        provider.signOutOfSync,
+                                      ),
+                              child: const Text('Sign out'),
+                            ),
+                          ]
+                        : [
+                            TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => runAction(
+                                        () => provider.createSyncAccount(
+                                          email: emailController.text,
+                                          password: passwordController.text,
+                                        ),
+                                      ),
+                              child: const Text('Create account'),
+                            ),
+                            FilledButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => runAction(
+                                        () => provider.signInToSync(
+                                          email: emailController.text,
+                                          password: passwordController.text,
+                                        ),
+                                      ),
+                              child: busy
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('Sign in'),
+                            ),
+                          ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      emailController.dispose();
+      passwordController.dispose();
+    }
   }
 
   Widget _buildKanbanView() {

@@ -43,6 +43,8 @@ void main() {
       final restored = Todo.fromMap(todo.toMap());
 
       expect(restored.id, 7);
+      expect(restored.syncId, todo.syncId);
+      expect(restored.updatedAt, todo.updatedAt);
       expect(restored.title, 'Buy groceries');
       expect(restored.description, 'Milk, eggs, bread');
       expect(restored.isCompleted, isTrue);

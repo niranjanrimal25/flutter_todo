@@ -6,7 +6,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 9;
+  static const int _dbVersion = 10;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -25,12 +25,14 @@ class StorageService {
         await db.execute('''
           CREATE TABLE todos(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            syncId TEXT,
             title TEXT NOT NULL,
             description TEXT,
             isCompleted INTEGER NOT NULL DEFAULT 0,
             status INTEGER NOT NULL DEFAULT 0,
             priority INTEGER NOT NULL DEFAULT 1,
             createdAt TEXT NOT NULL,
+            updatedAt TEXT,
             dueDate TEXT,
             reminderTime TEXT,
             reminderIntervalHours INTEGER NOT NULL DEFAULT 2,
@@ -116,6 +118,19 @@ class StorageService {
             UPDATE todos SET status = 2 WHERE isCompleted = 1
           ''');
         }
+        if (oldVersion < 10) {
+          // Sync identity is separate from the local autoincrement id because
+          // the same task has a different SQLite id on each device.
+          await db.execute('''
+            ALTER TABLE todos ADD COLUMN syncId TEXT
+          ''');
+          await db.execute('''
+            ALTER TABLE todos ADD COLUMN updatedAt TEXT
+          ''');
+          await db.execute('''
+            UPDATE todos SET updatedAt = createdAt WHERE updatedAt IS NULL
+          ''');
+        }
       },
     );
   }
@@ -145,7 +160,17 @@ class StorageService {
       // the only source of truth.
       orderBy: 'priority DESC, createdAt DESC',
     );
-    return maps.map((map) => Todo.fromMap(map)).toList();
+    final todos = maps.map((map) => Todo.fromMap(map)).toList();
+
+    // Version 10 added globally unique sync identities. Legacy rows get a
+    // generated identity the first time they are loaded, then it is written
+    // back so it stays stable across devices and app restarts.
+    for (var index = 0; index < todos.length; index++) {
+      if (maps[index]['syncId'] == null || maps[index]['updatedAt'] == null) {
+        await updateTodo(todos[index]);
+      }
+    }
+    return todos;
   }
 
   static Future<int> updateTodo(Todo todo) async {

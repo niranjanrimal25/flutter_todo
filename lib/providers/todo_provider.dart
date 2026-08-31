@@ -5,12 +5,29 @@ import '../models/todo.dart';
 import '../services/image_storage_service.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/firebase_sync_service.dart';
 import '../utils/constants.dart';
 
 class TodoProvider extends ChangeNotifier {
   List<Todo> _todos = [];
   TodoFilter _currentFilter = TodoFilter.all;
   String _searchQuery = '';
+  final FirebaseSyncService _syncService = FirebaseSyncService();
+  StreamSubscription<List<CloudTodoRecord>>? _remoteSyncSubscription;
+
+  TodoProvider() {
+    _syncService.addListener(_forwardSyncState);
+  }
+
+  FirebaseSyncService get syncService => _syncService;
+  CloudSyncState get syncState => _syncService.state;
+  String get syncStateLabel => _syncService.stateLabel;
+  String? get syncError => _syncService.lastError;
+  bool get isSyncAvailable => _syncService.isAvailable;
+  bool get isSyncSignedIn => _syncService.isSignedIn;
+  String? get syncEmail => _syncService.user?.email;
+
+  void _forwardSyncState() => notifyListeners();
 
   // Cached derived values — invalidated on every notifyListeners call.
   List<Todo>? _filteredCache;
@@ -118,6 +135,13 @@ class TodoProvider extends ChangeNotifier {
         debugPrint('Pending-task reminder refresh failed: $error');
       }),
     );
+    // Firebase is optional at startup. If the user has already connected an
+    // account, restore its session and merge changes without delaying the UI.
+    unawaited(
+      _resumeSync().catchError((error) {
+        debugPrint('Cloud task sync resume failed: $error');
+      }),
+    );
   }
 
   // Add todo
@@ -132,11 +156,14 @@ class TodoProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _queueTodoSync(todo);
     await _refreshPendingReminder();
   }
 
   // Update todo
   Future<void> updateTodo(Todo todo) async {
+    // Every local edit wins against an older remote copy by timestamp.
+    todo = todo.copyWith(updatedAt: DateTime.now());
     Todo? previousTodo;
     for (final existing in _todos) {
       if (existing.id == todo.id) {
@@ -171,6 +198,7 @@ class TodoProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _queueTodoSync(todo);
     await _refreshPendingReminder();
   }
 
@@ -199,6 +227,7 @@ class TodoProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+    if (deletedTodo != null) _queueDeletedTodoSync(deletedTodo!);
     await _refreshPendingReminder();
   }
 
@@ -212,7 +241,10 @@ class TodoProvider extends ChangeNotifier {
     final index = _todos.indexWhere((todo) => todo.id == id);
     if (index == -1 || _todos[index].status == status) return;
 
-    final updated = _todos[index].copyWith(status: status);
+    final updated = _todos[index].copyWith(
+      status: status,
+      updatedAt: DateTime.now(),
+    );
     // A task moved to Done must stop its recurring reminder. Moving it back
     // to an unfinished column re-arms the reminder if one was configured.
     await NotificationService.cancelRecurringReminder(id);
@@ -224,6 +256,7 @@ class TodoProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _queueTodoSync(updated);
     await _refreshPendingReminder();
   }
 
@@ -233,6 +266,7 @@ class TodoProvider extends ChangeNotifier {
     if (index != -1) {
       final updated = _todos[index].copyWith(
         isCompleted: !_todos[index].isCompleted,
+        updatedAt: DateTime.now(),
       );
       // Always cancel the old schedule before changing persistence. A task
       // marked complete must stop even if the process is killed mid-update.
@@ -245,6 +279,7 @@ class TodoProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+      _queueTodoSync(updated);
       await _refreshPendingReminder();
     }
   }
@@ -268,5 +303,190 @@ class TodoProvider extends ChangeNotifier {
   void search(String query) {
     _searchQuery = query;
     notifyListeners();
+  }
+
+  Future<void> initializeSync() => _syncService.initialize();
+
+  Future<void> signInToSync({
+    required String email,
+    required String password,
+  }) async {
+    await _syncService.signIn(email: email, password: password);
+    await _syncCurrentTodos();
+    _listenForRemoteChanges();
+  }
+
+  Future<void> createSyncAccount({
+    required String email,
+    required String password,
+  }) async {
+    await _syncService.createAccount(email: email, password: password);
+    await _syncCurrentTodos();
+    _listenForRemoteChanges();
+  }
+
+  Future<void> signOutOfSync() async {
+    await _remoteSyncSubscription?.cancel();
+    _remoteSyncSubscription = null;
+    await _syncService.signOut();
+  }
+
+  Future<void> syncNow() => _syncCurrentTodos();
+
+  Future<void> _resumeSync() async {
+    if (!await _syncService.initialize()) return;
+    if (!isSyncSignedIn) return;
+    await _syncCurrentTodos();
+    _listenForRemoteChanges();
+  }
+
+  Future<void> _syncCurrentTodos() async {
+    final result = await _syncService.sync(List<Todo>.of(_todos));
+    if (result == null) return;
+    await _applySyncResult(result);
+    _listenForRemoteChanges();
+  }
+
+  void _listenForRemoteChanges() {
+    if (!isSyncSignedIn) return;
+    _remoteSyncSubscription ??= _syncService.watchTodos().listen((records) {
+      unawaited(
+        _applyRemoteRecords(records).catchError((error) {
+          debugPrint('Remote task update failed: $error');
+        }),
+      );
+    });
+  }
+
+  Future<void> _applySyncResult(TodoSyncResult result) async {
+    final localBySyncId = <String, Todo>{
+      for (final todo in _todos) todo.syncId: todo,
+    };
+    var changed = false;
+
+    for (final syncId in result.deletedSyncIds) {
+      final local = localBySyncId[syncId];
+      if (local == null) continue;
+      await NotificationService.cancelRecurringReminder(local.id!);
+      await StorageService.deleteTodo(local.id!);
+      _todos.removeWhere((todo) => todo.syncId == syncId);
+      changed = true;
+      _queueSyncedImageCleanup(local.imagePath);
+    }
+
+    for (final incoming in result.todos) {
+      final local = localBySyncId[incoming.syncId];
+      if (local == null) {
+        final id = await StorageService.insertTodo(incoming);
+        _todos.add(incoming.copyWith(id: id));
+        changed = true;
+        if (!incoming.isCompleted && incoming.reminderTime != null) {
+          unawaited(NotificationService.scheduleRecurringReminder(
+            incoming.copyWith(id: id),
+          ));
+        }
+        continue;
+      }
+
+      if (!incoming.updatedAt.isAfter(local.updatedAt)) continue;
+      final merged = incoming.copyWith(id: local.id);
+      await StorageService.updateTodo(merged);
+      _todos[_todos.indexWhere((todo) => todo.id == local.id)] = merged;
+      await NotificationService.cancelRecurringReminder(local.id!);
+      if (!merged.isCompleted && merged.reminderTime != null) {
+        unawaited(NotificationService.scheduleRecurringReminder(merged));
+      }
+      changed = true;
+    }
+
+    if (changed) notifyListeners();
+  }
+
+  Future<void> _applyRemoteRecords(List<CloudTodoRecord> records) async {
+    if (!isSyncSignedIn) return;
+    final localBySyncId = <String, Todo>{
+      for (final todo in _todos) todo.syncId: todo,
+    };
+    var changed = false;
+
+    for (final record in records) {
+      final local = localBySyncId[record.syncId];
+      if (record.deleted) {
+        if (local == null || local.updatedAt.isAfter(record.updatedAt)) {
+          continue;
+        }
+        await NotificationService.cancelRecurringReminder(local.id!);
+        await StorageService.deleteTodo(local.id!);
+        _todos.removeWhere((todo) => todo.syncId == record.syncId);
+        _queueSyncedImageCleanup(local.imagePath);
+        changed = true;
+        continue;
+      }
+
+      if (local == null) {
+        final incoming = record.toTodo();
+        final id = await StorageService.insertTodo(incoming);
+        _todos.add(incoming.copyWith(id: id));
+        if (!incoming.isCompleted && incoming.reminderTime != null) {
+          unawaited(NotificationService.scheduleRecurringReminder(
+            incoming.copyWith(id: id),
+          ));
+        }
+        changed = true;
+      } else if (record.updatedAt.isAfter(local.updatedAt)) {
+        final merged = record.toTodo(local: local);
+        await StorageService.updateTodo(merged);
+        _todos[_todos.indexWhere((todo) => todo.id == local.id)] = merged;
+        await NotificationService.cancelRecurringReminder(local.id!);
+        if (!merged.isCompleted && merged.reminderTime != null) {
+          unawaited(NotificationService.scheduleRecurringReminder(merged));
+        }
+        changed = true;
+      } else if (local.updatedAt.isAfter(record.updatedAt)) {
+        unawaited(
+          _syncService.saveTodo(local).catchError((error) {
+            debugPrint('Local task reconciliation failed: $error');
+          }),
+        );
+      }
+    }
+
+    if (changed) notifyListeners();
+  }
+
+  void _queueTodoSync(Todo todo) {
+    unawaited(
+      _syncService.saveTodo(todo).catchError((error) {
+        debugPrint('Task sync failed: $error');
+      }),
+    );
+  }
+
+  void _queueDeletedTodoSync(Todo todo) {
+    unawaited(
+      _syncService
+          .markDeleted(todo.syncId, DateTime.now())
+          .catchError((error) {
+        debugPrint('Deleted task sync failed: $error');
+      }),
+    );
+  }
+
+  void _queueSyncedImageCleanup(String? imagePath) {
+    if (imagePath == null) return;
+    unawaited(
+      ImageStorageService.deleteIfOwned(imagePath).catchError((error) {
+        debugPrint('Synced image cleanup failed: $error');
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    final subscription = _remoteSyncSubscription;
+    if (subscription != null) unawaited(subscription.cancel());
+    _syncService.removeListener(_forwardSyncState);
+    _syncService.dispose();
+    super.dispose();
   }
 }
