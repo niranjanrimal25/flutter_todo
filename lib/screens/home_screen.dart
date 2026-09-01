@@ -656,23 +656,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             TextButton(
                               onPressed: busy
                                   ? null
-                                  : () => runAction(
+                                  : () {
+                                      final email =
+                                          emailController.text.trim();
+                                      final password =
+                                          passwordController.text;
+                                      if (email.isEmpty ||
+                                          password.isEmpty) {
+                                        setDialogState(() => message =
+                                            'Please enter your email and password.');
+                                        return;
+                                      }
+                                      runAction(
                                         () => provider.createSyncAccount(
-                                          email: emailController.text,
-                                          password: passwordController.text,
+                                          email: email,
+                                          password: password,
                                         ),
-                                      ),
+                                      );
+                                    },
                               child: const Text('Create account'),
                             ),
                             FilledButton(
                               onPressed: busy
                                   ? null
-                                  : () => runAction(
+                                  : () {
+                                      final email =
+                                          emailController.text.trim();
+                                      final password =
+                                          passwordController.text;
+                                      if (email.isEmpty ||
+                                          password.isEmpty) {
+                                        setDialogState(() => message =
+                                            'Please enter your email and password.');
+                                        return;
+                                      }
+                                      runAction(
                                         () => provider.signInToSync(
-                                          email: emailController.text,
-                                          password: passwordController.text,
+                                          email: email,
+                                          password: password,
                                         ),
-                                      ),
+                                      );
+                                    },
                               child: busy
                                   ? const SizedBox(
                                       width: 18,

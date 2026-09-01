@@ -212,7 +212,7 @@ class FirebaseSyncService extends ChangeNotifier {
       _setError(_authErrorMessage(error));
       rethrow;
     } catch (error) {
-      _setError(error.toString());
+      _setError(_genericAuthError(error));
       rethrow;
     }
   }
@@ -236,7 +236,7 @@ class FirebaseSyncService extends ChangeNotifier {
       _setError(_authErrorMessage(error));
       rethrow;
     } catch (error) {
-      _setError(error.toString());
+      _setError(_genericAuthError(error));
       rethrow;
     }
   }
@@ -422,6 +422,18 @@ class FirebaseSyncService extends ChangeNotifier {
       default:
         return error.message ?? 'Firebase authentication failed.';
     }
+  }
+
+  /// Converts a non-FirebaseAuthException (e.g. Pigeon PlatformException whose
+  /// toString() contains internal method names) into a user-readable string.
+  static String _genericAuthError(Object error) {
+    final raw = error.toString();
+    // Pigeon exceptions look like:
+    //   "dev.flutter.pigeon.firebase_auth_platform_interface.FirebaseAuthHostApi.<method>"
+    if (raw.contains('pigeon') || raw.contains('PlatformException')) {
+      return 'Sign-in failed. Check your email and password, then try again.';
+    }
+    return raw;
   }
 
   static String _friendlySyncError(Object error) {
