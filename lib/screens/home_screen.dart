@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -537,8 +538,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   constraints: const BoxConstraints(maxWidth: 360),
                   child: !provider.isSyncAvailable
                       ? const Text(
-                          'Firebase is not configured for this build yet. '
-                          'Run flutterfire configure, then restart the app.',
+                          kIsWeb
+                              ? 'Connecting to Firebase…\n\n'
+                                'If this keeps appearing, the web app ID in '
+                                'firebase_options.dart needs to be updated '
+                                'with the one from Firebase Console → '
+                                'Project Settings → Your apps → Web.'
+                              : 'Firebase is not configured for this build. '
+                                'Run flutterfire configure, then restart the app.',
                         )
                       : isSignedIn
                           ? Column(

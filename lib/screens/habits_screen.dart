@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -472,7 +471,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
             Wrap(
               spacing: 14,
               children: _habitColors.map((color) {
-                final selected = color.value == _selectedColor.value;
+                final selected = color.toARGB32() == _selectedColor.toARGB32();
                 return GestureDetector(
                   onTap: () => setState(() => _selectedColor = color),
                   child: AnimatedContainer(
@@ -581,7 +580,7 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
       title: _titleController.text.trim(),
       createdAt: widget.habit?.createdAt,
       icon: _selectedIcon,
-      colorValue: _selectedColor.value,
+      colorValue: _selectedColor.toARGB32(),
       reminderHour: _hasReminder ? _reminderTime?.hour : null,
       reminderMinute: _hasReminder ? _reminderTime?.minute : null,
     );
@@ -700,7 +699,7 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
                       if (day.isAfter(_dateOnly(DateTime.now()))) return;
                       unawaited(
                         provider.toggleDay(habit.id!, day).catchError((error) {
-                          if (mounted) {
+                          if (context.mounted) {
                             AppFeedback.error(
                               context,
                               'Could not update habit day',

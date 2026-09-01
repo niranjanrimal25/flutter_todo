@@ -221,7 +221,7 @@ void main() {
         title: 'Daily exercise',
         createdAt: DateTime(2026, 8, 1, 7, 30),
         icon: 'fitness',
-        colorValue: AppColors.success.value,
+        colorValue: AppColors.success.toARGB32(),
         reminderHour: 6,
         reminderMinute: 45,
       );
@@ -238,7 +238,7 @@ void main() {
       expect(restoredHabit.id, 4);
       expect(restoredHabit.title, 'Daily exercise');
       expect(restoredHabit.icon, 'fitness');
-      expect(restoredHabit.colorValue, AppColors.success.value);
+      expect(restoredHabit.colorValue, AppColors.success.toARGB32());
       expect(restoredHabit.reminderHour, 6);
       expect(restoredHabit.reminderMinute, 45);
       expect(restoredLog.id, 8);

@@ -227,7 +227,7 @@ class TodoProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
-    if (deletedTodo != null) _queueDeletedTodoSync(deletedTodo!);
+    if (deletedTodo != null) _queueDeletedTodoSync(deletedTodo);
     await _refreshPendingReminder();
   }
 
