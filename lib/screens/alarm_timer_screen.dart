@@ -563,6 +563,52 @@ class _AlarmTabState extends State<_AlarmTab> {
         return ListView(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           children: [
+            if (Platform.isIOS) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Card(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline_rounded,
+                            color: Colors.amber, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Keep app in the background for alarms',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'iOS does not allow apps to ring when fully closed. '
+                                'Swipe up to the home screen but do not swipe the app away. '
+                                'If the app is closed, you will only receive a silent notification instead of a ringing alarm.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Colors.amber.shade700,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
             if (Platform.isAndroid && !_checking) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

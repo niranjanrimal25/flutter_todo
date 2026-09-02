@@ -317,10 +317,13 @@ class AlarmRingScheduler {
           warningNotificationOnKill: Platform.isIOS,
           allowAlarmOverlap: allowAlarmOverlap,
           allowSameSecondScheduling: allowSameSecondScheduling,
-          // Gentle 5-second volume fade instead of an abrupt blare.
+          // Gentle fade-in. showSystemUI: false hides the system volume bar
+          // that would otherwise appear on both Android and iOS when the
+          // alarm package adjusts the volume.
           volumeSettings: alarm_plugin.VolumeSettings.fade(
             volume: 0.9,
             fadeDuration: const Duration(seconds: 5),
+            showSystemUI: false,
           ),
           payload: payload,
           notificationSettings: alarm_plugin.NotificationSettings(
