@@ -168,7 +168,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: 'Niranjan Todo',
+            title: 'NS TODO',
             debugShowCheckedModeBanner: false,
             navigatorKey: appNavigatorKey,
             theme: AppTheme.lightTheme,

@@ -438,7 +438,7 @@ class NotificationService {
         title: pendingCount == 1
             ? '📝 You have 1 pending task'
             : '📝 You have $pendingCount pending tasks',
-        body: 'Don\'t forget — open Niranjan Todo and finish them!',
+        body: 'Don\'t forget — open NS TODO and finish them!',
         scheduledDate: scheduledDate,
         notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

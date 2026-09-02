@@ -16,7 +16,7 @@
     <!-- Let the user exempt the app from battery optimization (Doze) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
-        android:label="Niranjan Todo"
+        android:label="NS TODO"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

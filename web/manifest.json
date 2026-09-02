@@ -1,11 +1,11 @@
 {
-    "name": "Niranjan Todo",
-    "short_name": "Niranjan Todo",
+    "name": "NS TODO",
+    "short_name": "NS TODO",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#6C63FF",
     "theme_color": "#6C63FF",
-    "description": "Niranjan Todo — todos, reminders, alarms and a timer.",
+    "description": "NS TODO — todos, reminders, alarms and a timer.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

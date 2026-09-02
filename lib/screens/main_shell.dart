@@ -279,7 +279,7 @@ class _AnimatedAppSplashState extends State<_AnimatedAppSplash>
                     child: SlideTransition(
                       position: _textSlide,
                       child: const Text(
-                        'Niranjan Todo',
+                        'NS TODO',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
