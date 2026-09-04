@@ -26,6 +26,12 @@ class NotificationService {
   /// collide with either.
   static const int recurringReminderNotificationIdBase =
       AlarmRingScheduler.recurringReminderIdBase;
+
+  /// iOS-only backup notification IDs. When the app is killed on iOS the alarm
+  /// plugin's audio stops, but a flutter_local_notifications UNCalendarNotification
+  /// Trigger persists at the OS level and delivers the banner independently.
+  static const int _iOSBackupNotificationBase = 700000;
+  static int _iOSBackupId(int todoId) => _iOSBackupNotificationBase + todoId;
   static const MethodChannel _nativeReminderChannel =
       MethodChannel('todo_app/notification');
 
@@ -201,6 +207,20 @@ class NotificationService {
           title: todo.title,
           body: body,
         );
+        // iOS backup: a flutter_local_notifications UNCalendarNotificationTrigger
+        // is managed by the OS and fires even when the app is fully killed.
+        // The alarm package audio stops on kill, but this banner guarantees the
+        // user is still notified. The banner uses the default system sound since
+        // custom audio requires a running app to play.
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          await _scheduleIOSBackupNotification(
+            id: _iOSBackupId(todo.id!),
+            title: todo.title,
+            body: body,
+            scheduledDate: firstAt,
+            payload: 'todo:${todo.id}',
+          );
+        }
       }
       debugPrint(
           'Recurring alarm scheduled for task ${todo.id} at $firstAt');
@@ -249,6 +269,10 @@ class NotificationService {
       await AlarmRingScheduler.stop(
         AlarmRingScheduler.recurringReminderId(todoId),
       );
+      // Cancel the iOS backup notification too.
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await cancelNotification(_iOSBackupId(todoId));
+      }
     }
   }
 
@@ -447,6 +471,40 @@ class NotificationService {
       debugPrint('✅ Pending-task reminder scheduled for $scheduledDate');
     } catch (e) {
       debugPrint('❌ Error scheduling pending-task reminder: $e');
+    }
+  }
+
+  // ===== iOS backup notifications =====
+
+  /// Schedules a UNCalendarNotificationTrigger via flutter_local_notifications.
+  /// Unlike the alarm plugin's audio session, this notification is owned by the
+  /// OS and fires even when the app is fully killed.
+  static Future<void> _scheduleIOSBackupNotification({
+    required int id,
+    required String title,
+    required String body,
+    required tz.TZDateTime scheduledDate,
+    String? payload,
+  }) async {
+    try {
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      );
+      await _notifications.zonedSchedule(
+        id: id,
+        title: '📋 $title',
+        body: body,
+        scheduledDate: scheduledDate,
+        notificationDetails: const NotificationDetails(iOS: iosDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: payload,
+      );
+      debugPrint('✅ iOS backup notification $id scheduled for $scheduledDate');
+    } catch (error) {
+      debugPrint('❌ iOS backup notification scheduling failed: $error');
     }
   }
 
