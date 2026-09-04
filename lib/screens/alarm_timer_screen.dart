@@ -897,6 +897,8 @@ class _TimerTabState extends State<_TimerTab> {
     await AlarmRingScheduler.scheduleTimerEnd(endTime: endTime);
     // Live countdown in the notification — survives closing the app.
     await NotificationService.showTimerRunning(endTime: endTime);
+    // iOS backup: fires at endTime even if the app is fully killed.
+    await NotificationService.scheduleIOSTimerBackup(endTime: endTime);
     if (!mounted) return;
     _startTicker();
     _saveState(endTime: endTime);
@@ -909,6 +911,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker = null;
     AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
+    NotificationService.cancelIOSTimerBackup();
     _saveState(pausedRemaining: _remainingSeconds);
     setState(() {});
     AppFeedback.success(context, 'Timer paused successfully');
@@ -919,6 +922,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker = null;
     AlarmRingScheduler.stopTimer();
     NotificationService.cancelTimerRunning();
+    NotificationService.cancelIOSTimerBackup();
     _clearState();
     _remainingNotifier.value = _totalSeconds;
     setState(() {});
@@ -929,6 +933,7 @@ class _TimerTabState extends State<_TimerTab> {
     _ticker?.cancel();
     _ticker = null;
     NotificationService.cancelTimerRunning();
+    NotificationService.cancelIOSTimerBackup();
     _clearState();
     _remainingNotifier.value = 0;
     setState(() {});

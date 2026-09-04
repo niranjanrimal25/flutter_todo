@@ -475,6 +475,53 @@ class NotificationService {
   }
 
   // ===== iOS backup notifications =====
+  // The alarm plugin removes its UNCalendarNotificationTriggers when the iOS
+  // process is terminated. These methods schedule a separate
+  // flutter_local_notifications trigger that the OS keeps alive, guaranteeing
+  // at least a banner when the app is fully killed.
+
+  static const int _iOSAlarmBackupBase  = 800000; // alarm id + this
+  static const int _iOSTimerBackupId    = 900000;
+
+  /// iOS-only backup for a user alarm. Call after AlarmRingScheduler.scheduleAlarm().
+  static Future<void> scheduleIOSAlarmBackup({
+    required int alarmId,
+    required String label,
+    required DateTime scheduledAt,
+  }) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    await _scheduleIOSBackupNotification(
+      id: _iOSAlarmBackupBase + alarmId,
+      title: '⏰ $label',
+      body: 'Your alarm is ringing.',
+      scheduledDate: tz.TZDateTime.from(scheduledAt, tz.local),
+    );
+  }
+
+  /// iOS-only backup for the countdown timer end. Call after scheduleTimerEnd().
+  static Future<void> scheduleIOSTimerBackup({
+    required DateTime endTime,
+  }) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    await _scheduleIOSBackupNotification(
+      id: _iOSTimerBackupId,
+      title: '⏱️ Timer finished',
+      body: 'Your countdown timer has ended.',
+      scheduledDate: tz.TZDateTime.from(endTime, tz.local),
+    );
+  }
+
+  /// Cancels the iOS alarm backup when the alarm is stopped or deleted.
+  static Future<void> cancelIOSAlarmBackup(int alarmId) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    await cancelNotification(_iOSAlarmBackupBase + alarmId);
+  }
+
+  /// Cancels the iOS timer backup when the timer is paused/reset.
+  static Future<void> cancelIOSTimerBackup() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    await cancelNotification(_iOSTimerBackupId);
+  }
 
   /// Schedules a UNCalendarNotificationTrigger via flutter_local_notifications.
   /// Unlike the alarm plugin's audio session, this notification is owned by the
@@ -486,6 +533,7 @@ class NotificationService {
     required tz.TZDateTime scheduledDate,
     String? payload,
   }) async {
+    await _waitForInitialization();
     try {
       const iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -495,7 +543,7 @@ class NotificationService {
       );
       await _notifications.zonedSchedule(
         id: id,
-        title: '📋 $title',
+        title: title,
         body: body,
         scheduledDate: scheduledDate,
         notificationDetails: const NotificationDetails(iOS: iosDetails),

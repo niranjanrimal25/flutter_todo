@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/alarm.dart';
 import '../services/alarm_scheduler.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 
 class AlarmProvider extends ChangeNotifier {
@@ -31,20 +32,22 @@ class AlarmProvider extends ChangeNotifier {
   }
 
   Future<void> updateAlarm(Alarm alarm) async {
-    if (alarm.id != null) await AlarmRingScheduler.stop(alarm.id!);
+    if (alarm.id != null) {
+      await AlarmRingScheduler.stop(alarm.id!);
+      await NotificationService.cancelIOSAlarmBackup(alarm.id!);
+    }
     await StorageService.updateAlarm(alarm);
     _replaceAlarm(alarm);
 
     if (alarm.isEnabled && alarm.id != null) {
       await _scheduleAndPersist(alarm);
-    } else if (alarm.id != null) {
-      await AlarmRingScheduler.stop(alarm.id!);
     }
     notifyListeners();
   }
 
   Future<void> deleteAlarm(int id) async {
     await AlarmRingScheduler.stop(id);
+    await NotificationService.cancelIOSAlarmBackup(id);
     await StorageService.deleteAlarm(id);
     _alarms.removeWhere((a) => a.id == id);
     notifyListeners();
@@ -90,6 +93,13 @@ class AlarmProvider extends ChangeNotifier {
     await StorageService.updateAlarm(scheduled);
     _replaceAlarm(scheduled);
     await AlarmRingScheduler.scheduleAlarm(scheduled);
+    // iOS: schedule a flutter_local_notifications backup that the OS delivers
+    // even when the app is fully killed (alarm plugin audio stops on kill).
+    await NotificationService.scheduleIOSAlarmBackup(
+      alarmId: alarm.id!,
+      label: alarm.label,
+      scheduledAt: next,
+    );
   }
 
   void _replaceAlarm(Alarm alarm) {
