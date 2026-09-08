@@ -150,9 +150,14 @@ class TodoProvider extends ChangeNotifier {
     todo = todo.copyWith(id: id);
     _todos.add(todo);
 
-    // Schedule the recurring reminder
     if (todo.reminderTime != null) {
       await NotificationService.scheduleRecurringReminder(todo);
+    }
+    // Due-date notification fires at the exact due date/time regardless of
+    // whether the recurring-reminder toggle is on.
+    if (!todo.isCompleted) {
+      unawaited(NotificationService.scheduleDueDateNotification(todo)
+          .catchError((e) => debugPrint('Due-date notify failed: $e')));
     }
 
     notifyListeners();
@@ -176,6 +181,7 @@ class TodoProvider extends ChangeNotifier {
     // reschedule cannot leave an old reminder running with stale task data.
     if (todo.id != null) {
       await NotificationService.cancelRecurringReminder(todo.id!);
+      await NotificationService.cancelDueDateNotification(todo.id!);
     }
 
     await StorageService.updateTodo(todo);
@@ -196,6 +202,10 @@ class TodoProvider extends ChangeNotifier {
     if (todo.id != null && todo.reminderTime != null && !todo.isCompleted) {
       await NotificationService.scheduleRecurringReminder(todo);
     }
+    if (todo.id != null && !todo.isCompleted) {
+      unawaited(NotificationService.scheduleDueDateNotification(todo)
+          .catchError((e) => debugPrint('Due-date notify failed: $e')));
+    }
 
     notifyListeners();
     _queueTodoSync(todo);
@@ -215,6 +225,7 @@ class TodoProvider extends ChangeNotifier {
     // Cancel first so a killed process cannot leave a deleted task's native
     // Android alarm armed until the next app launch.
     await NotificationService.cancelRecurringReminder(id);
+    await NotificationService.cancelDueDateNotification(id);
     await StorageService.deleteTodo(id);
     _todos.removeWhere((t) => t.id == id);
 
@@ -248,11 +259,16 @@ class TodoProvider extends ChangeNotifier {
     // A task moved to Done must stop its recurring reminder. Moving it back
     // to an unfinished column re-arms the reminder if one was configured.
     await NotificationService.cancelRecurringReminder(id);
+    await NotificationService.cancelDueDateNotification(id);
     await StorageService.updateTodo(updated);
     _todos[index] = updated;
 
     if (!updated.isCompleted && updated.reminderTime != null) {
       await NotificationService.scheduleRecurringReminder(updated);
+    }
+    if (!updated.isCompleted) {
+      unawaited(NotificationService.scheduleDueDateNotification(updated)
+          .catchError((e) => debugPrint('Due-date notify failed: $e')));
     }
 
     notifyListeners();
@@ -271,11 +287,16 @@ class TodoProvider extends ChangeNotifier {
       // Always cancel the old schedule before changing persistence. A task
       // marked complete must stop even if the process is killed mid-update.
       await NotificationService.cancelRecurringReminder(id);
+      await NotificationService.cancelDueDateNotification(id);
       _todos[index] = updated;
       await StorageService.updateTodo(updated);
 
       if (!updated.isCompleted && updated.reminderTime != null) {
         await NotificationService.scheduleRecurringReminder(updated);
+      }
+      if (!updated.isCompleted) {
+        unawaited(NotificationService.scheduleDueDateNotification(updated)
+            .catchError((e) => debugPrint('Due-date notify failed: $e')));
       }
 
       notifyListeners();

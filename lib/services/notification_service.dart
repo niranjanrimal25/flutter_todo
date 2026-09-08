@@ -21,6 +21,11 @@ class NotificationService {
   static const int _timerRunningId = 200001;
   static const int _pendingReminderId = 300000;
 
+  /// One-shot due-date notifications (flutter_local_notifications).
+  /// Fires exactly at todo.dueDate on all platforms — works even when killed.
+  static const int _dueDateNotificationBase = 400000;
+  static int _dueDateId(int todoId) => _dueDateNotificationBase + todoId;
+
   /// Reserved namespace for per-task recurring alarms/notifications. Regular
   /// alarms use database ids and the timer uses 500000, so this range cannot
   /// collide with either.
@@ -160,6 +165,69 @@ class NotificationService {
   /// id for its full-screen ringing notification.
   static int recurringReminderNotificationId(int todoId) =>
       recurringReminderNotificationIdBase + todoId;
+
+  // ===== Due-date notifications =====
+
+  /// Schedules a one-shot notification that fires exactly at [todo.dueDate].
+  /// Uses flutter_local_notifications (UNCalendarNotificationTrigger on iOS,
+  /// exact AlarmManager on Android) so it is delivered even when the app is
+  /// fully killed. Replaces any existing due-date notification for this task.
+  static Future<void> scheduleDueDateNotification(Todo todo) async {
+    final due = todo.dueDate;
+    if (todo.id == null || due == null) return;
+
+    await _waitForInitialization();
+    // Cancel any previous due-date notification for this task first.
+    await cancelDueDateNotification(todo.id!);
+
+    final scheduledDate = tz.TZDateTime.from(due, tz.local);
+    if (!scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) return;
+
+    const androidDetails = AndroidNotificationDetails(
+      'due_dates',
+      'Due Dates',
+      channelDescription: 'Notifications when a task becomes due',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      playSound: true,
+      enableVibration: true,
+      category: AndroidNotificationCategory.reminder,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.active,
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    try {
+      await _notifications.zonedSchedule(
+        id: _dueDateId(todo.id!),
+        title: '📅 Due: ${todo.title}',
+        body: todo.description.isNotEmpty
+            ? todo.description
+            : 'This task is now due.',
+        scheduledDate: scheduledDate,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'todo:${todo.id}',
+      );
+      debugPrint('✅ Due-date notification scheduled for ${todo.id} at $scheduledDate');
+    } catch (error) {
+      debugPrint('❌ Due-date notification failed: $error');
+    }
+  }
+
+  /// Cancels the due-date notification for a task.
+  static Future<void> cancelDueDateNotification(int todoId) async {
+    await _waitForInitialization();
+    await cancelNotification(_dueDateId(todoId));
+  }
 
   /// Schedules a one-to-24-hour recurring reminder through the same alarm
   /// plugin used by regular alarms. It therefore uses the looping ringtone,
