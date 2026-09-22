@@ -59,6 +59,21 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
                     }
+                    "setQuietHours" -> {
+                        val arguments = call.arguments as? Map<*, *>
+                        val enabled = arguments?.get("enabled") as? Boolean ?: false
+                        val startMinutes = (arguments?.get("startMinutes") as? Number)?.toInt()
+                            ?: 22 * 60
+                        val endMinutes = (arguments?.get("endMinutes") as? Number)?.toInt()
+                            ?: 7 * 60
+                        RecurringReminderReceiver.setQuietHours(
+                            applicationContext,
+                            enabled,
+                            startMinutes,
+                            endMinutes,
+                        )
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

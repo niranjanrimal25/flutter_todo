@@ -8,6 +8,8 @@ import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
 import '../providers/todo_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/quiet_hours_provider.dart';
+import '../models/quiet_hours.dart';
 import '../services/firebase_sync_service.dart';
 import '../utils/constants.dart';
 import '../widgets/todo_card.dart';
@@ -100,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(isDark),
+            _buildQuietHoursIndicator(isDark),
             _buildStatsRow(isDark),
             _buildFilterChips(isDark),
             if (_isSearching) _buildSearchBar(),
@@ -181,6 +184,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           Row(
             children: [
+              Consumer<QuietHoursProvider>(
+                builder: (context, quietProvider, _) {
+                  final active = quietProvider.isActiveNow;
+                  return IconButton(
+                    tooltip: active
+                        ? 'Quiet hours active'
+                        : 'Quiet hours settings',
+                    onPressed: _showQuietHoursDialog,
+                    icon: Icon(
+                      active
+                          ? Icons.nightlight_round
+                          : Icons.nightlight_outlined,
+                      color: active ? AppColors.warning : AppColors.primary,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: (active
+                              ? AppColors.warning
+                              : AppColors.primary)
+                          .withValues(alpha: 0.1),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
               Consumer<TodoProvider>(
                 builder: (context, provider, _) {
                   final state = provider.syncState;
@@ -471,6 +498,200 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuietHoursIndicator(bool isDark) {
+    return Consumer<QuietHoursProvider>(
+      builder: (context, provider, _) {
+        if (!provider.isActiveNow) return const SizedBox.shrink();
+        final until = TimeOfDay.fromDateTime(
+          provider.settings.endTimeForDisplay,
+        ).format(context);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.nightlight_round,
+                size: 16,
+                color: AppColors.warning,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Quiet hours active until $until',
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.textGrey,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showQuietHoursDialog() async {
+    final provider = context.read<QuietHoursProvider>();
+    var enabled = provider.settings.enabled;
+    var start = TimeOfDay(
+      hour: provider.settings.startMinutes ~/ 60,
+      minute: provider.settings.startMinutes % 60,
+    );
+    var end = TimeOfDay(
+      hour: provider.settings.endMinutes ~/ 60,
+      minute: provider.settings.endMinutes % 60,
+    );
+    var saving = false;
+    String? error;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> pickStart() async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: start,
+            );
+            if (picked != null) setDialogState(() => start = picked);
+          }
+
+          Future<void> pickEnd() async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: end,
+            );
+            if (picked != null) setDialogState(() => end = picked);
+          }
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.nightlight_round, color: AppColors.primary),
+                SizedBox(width: 8),
+                Text('Quiet Hours'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: enabled,
+                    onChanged: saving
+                        ? null
+                        : (value) => setDialogState(() => enabled = value),
+                    title: const Text('Silence task reminders'),
+                    subtitle: const Text(
+                      'Only repeating task reminders are affected. Alarms and timers always ring.',
+                    ),
+                  ),
+                  if (enabled) ...[
+                    const SizedBox(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.bedtime_outlined),
+                      title: const Text('Start time'),
+                      trailing: Text(
+                        start.format(context),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      onTap: pickStart,
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.wb_sunny_outlined),
+                      title: const Text('End time'),
+                      trailing: Text(
+                        end.format(context),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      onTap: pickEnd,
+                    ),
+                    Text(
+                      'Windows can cross midnight, for example 10:00 PM to 7:00 AM.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      error!,
+                      style: const TextStyle(
+                        color: AppColors.danger,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          saving = true;
+                          error = null;
+                        });
+                        try {
+                          await provider.update(
+                            QuietHoursSettings(
+                              enabled: enabled,
+                              startMinutes: QuietHoursSettings.minutes(
+                                start.hour,
+                                start.minute,
+                              ),
+                              endMinutes: QuietHoursSettings.minutes(
+                                end.hour,
+                                end.minute,
+                              ),
+                            ),
+                          );
+                          // The Android companion receives the setting through
+                          // NotificationService; this also rebuilds Dart/iOS
+                          // scheduled occurrences with the same window.
+                          await context
+                              .read<TodoProvider>()
+                              .rescheduleAllTaskReminders();
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                        } catch (_) {
+                          if (context.mounted) {
+                            setDialogState(() {
+                              saving = false;
+                              error = 'Could not save quiet-hours settings.';
+                            });
+                          }
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

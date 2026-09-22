@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/todo_provider.dart';
 import '../providers/alarm_provider.dart';
 import '../providers/habit_provider.dart';
+import '../providers/quiet_hours_provider.dart';
 import '../services/notification_navigation.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
@@ -41,6 +42,7 @@ class _MainShellState extends State<MainShell> {
         context.read<TodoProvider>().loadTodos(),
         context.read<AlarmProvider>().loadAlarms(),
         context.read<HabitProvider>().loadHabits(),
+        context.read<QuietHoursProvider>().load(),
         minimumSplash,
       ]);
     } catch (_) {
@@ -49,6 +51,16 @@ class _MainShellState extends State<MainShell> {
       await minimumSplash;
     }
     if (!mounted) return;
+    if (context.read<QuietHoursProvider>().enabled) {
+      // Dart-scheduled iOS occurrences need rebuilding when the global window
+      // is restored. Android's native recurrence companion reschedules itself
+      // from the same persisted setting.
+      unawaited(
+        context.read<TodoProvider>().rescheduleAllTaskReminders().catchError((error) {
+          debugPrint('Quiet-hours reminder refresh failed: $error');
+        }),
+      );
+    }
     setState(() => _loaded = true);
 
     // A notification tap can arrive before the SQLite-backed provider is

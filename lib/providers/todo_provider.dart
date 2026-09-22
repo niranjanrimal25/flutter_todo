@@ -475,6 +475,14 @@ class TodoProvider extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  Future<void> rescheduleAllTaskReminders() async {
+    for (final todo in _todos) {
+      if (todo.reminderTime != null && !todo.isCompleted) {
+        await NotificationService.scheduleRecurringReminder(todo);
+      }
+    }
+  }
+
   void _queueTodoSync(Todo todo) {
     unawaited(
       _syncService.saveTodo(todo).catchError((error) {

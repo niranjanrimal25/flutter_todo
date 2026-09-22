@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'providers/alarm_provider.dart';
 import 'providers/habit_provider.dart';
+import 'providers/quiet_hours_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/todo_provider.dart';
 import 'screens/main_shell.dart';
@@ -163,6 +164,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TodoProvider()),
         ChangeNotifierProvider(create: (_) => AlarmProvider()),
         ChangeNotifierProvider(create: (_) => HabitProvider()),
+        ChangeNotifierProvider(create: (_) => QuietHoursProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(

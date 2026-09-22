@@ -55,6 +55,9 @@ class RecurringReminderReceiver : BroadcastReceiver() {
         private const val KEY_ACTIVE_PLUGIN_PREFIX = "active_plugin_"
         private const val KEY_PREVIOUS_PLUGIN_PREFIX = "previous_plugin_"
         private const val KEY_SEQUENCE_PREFIX = "sequence_"
+        private const val KEY_QUIET_ENABLED = "quiet_enabled"
+        private const val KEY_QUIET_START = "quiet_start_minutes"
+        private const val KEY_QUIET_END = "quiet_end_minutes"
         private const val INVALID_ID = -1
         private const val DEFAULT_INTERVAL_HOURS = 2
         // AlarmScheduler.requireDurable rejects delays <= 5 seconds because
@@ -87,8 +90,11 @@ class RecurringReminderReceiver : BroadcastReceiver() {
             val appContext = context.applicationContext
             val safeInterval = intervalHours.coerceIn(1, 24)
             val safeTone = tone.ifBlank { "assets/sounds/alarm.wav" }
-            val firstAt = firstAtMillis.coerceAtLeast(
-                System.currentTimeMillis() + MINIMUM_DELAY_MILLIS,
+            val firstAt = pushOutsideQuietHours(
+                firstAtMillis.coerceAtLeast(
+                    System.currentTimeMillis() + MINIMUM_DELAY_MILLIS,
+                ),
+                preferences(appContext),
             )
             val prefs = preferences(appContext)
 
@@ -144,6 +150,21 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 .commit()
         }
 
+        fun setQuietHours(
+            context: Context,
+            enabled: Boolean,
+            startMinutes: Int,
+            endMinutes: Int,
+        ) {
+            val appContext = context.applicationContext
+            preferences(appContext).edit()
+                .putBoolean(KEY_QUIET_ENABLED, enabled)
+                .putInt(KEY_QUIET_START, startMinutes.coerceIn(0, 1439))
+                .putInt(KEY_QUIET_END, endMinutes.coerceIn(0, 1439))
+                .commit()
+            rescheduleAll(appContext)
+        }
+
         fun rescheduleAll(context: Context) {
             val appContext = context.applicationContext
             val prefs = preferences(appContext)
@@ -162,6 +183,8 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                     now + intervalHours * HOUR_MILLIS,
                 )
                 while (nextAt <= now) nextAt += intervalHours * HOUR_MILLIS
+                nextAt = pushOutsideQuietHours(nextAt, prefs)
+                cancelStoredAlarms(appContext, taskId, prefs)
 
                 val activePluginId = prefs.getInt(
                     activePluginKey(taskId),
@@ -203,6 +226,7 @@ class RecurringReminderReceiver : BroadcastReceiver() {
             do {
                 nextAt += intervalMillis
             } while (nextAt <= now)
+            nextAt = pushOutsideQuietHours(nextAt, prefs)
 
             val currentPluginId = prefs.getInt(
                 activePluginKey(taskId),
@@ -236,6 +260,41 @@ class RecurringReminderReceiver : BroadcastReceiver() {
                 nextPluginId,
             )
             scheduleCompanionAlarm(context, taskId, nextAt)
+        }
+
+        private fun pushOutsideQuietHours(
+            atMillis: Long,
+            prefs: android.content.SharedPreferences,
+        ): Long {
+            if (!prefs.getBoolean(KEY_QUIET_ENABLED, false)) return atMillis
+
+            val start = prefs.getInt(KEY_QUIET_START, 22 * 60).coerceIn(0, 1439)
+            val end = prefs.getInt(KEY_QUIET_END, 7 * 60).coerceIn(0, 1439)
+            val calendar = java.util.Calendar.getInstance().apply {
+                timeInMillis = atMillis
+            }
+            val currentMinutes = calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 +
+                calendar.get(java.util.Calendar.MINUTE)
+            val active = if (start == end) {
+                true
+            } else if (start < end) {
+                currentMinutes >= start && currentMinutes < end
+            } else {
+                currentMinutes >= start || currentMinutes < end
+            }
+            if (!active) return atMillis
+
+            val quietEnd = java.util.Calendar.getInstance().apply {
+                timeInMillis = atMillis
+                set(java.util.Calendar.HOUR_OF_DAY, end / 60)
+                set(java.util.Calendar.MINUTE, end % 60)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            if (quietEnd.timeInMillis <= atMillis) {
+                quietEnd.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+            return quietEnd.timeInMillis
         }
 
         private fun schedulePluginAlarm(

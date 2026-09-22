@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
 import '../models/habit.dart';
+import '../models/quiet_hours.dart';
 import '../models/todo.dart';
 import 'alarm_scheduler.dart';
 
@@ -50,6 +51,9 @@ class NotificationService {
   static const int _legacyTimerEndId = 200000;
 
   static void Function(String payload)? _onNotificationTap;
+  static QuietHoursSettings _quietHours = const QuietHoursSettings();
+
+  static QuietHoursSettings get quietHours => _quietHours;
 
   static Future<void> initialize({
     void Function(String payload)? onNotificationTap,
@@ -159,6 +163,25 @@ class NotificationService {
   }
 
 
+  // ===== Quiet hours =====
+
+  /// Applies quiet hours to the task-reminder scheduling path only. Regular
+  /// alarms and timers never call this path and remain time-critical.
+  static Future<void> setQuietHours(QuietHoursSettings settings) async {
+    _quietHours = settings;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await _nativeReminderChannel.invokeMethod<void>('setQuietHours', {
+          'enabled': settings.enabled,
+          'startMinutes': settings.startMinutes,
+          'endMinutes': settings.endMinutes,
+        });
+      } catch (error) {
+        debugPrint('Native quiet-hours update failed: $error');
+      }
+    }
+  }
+
   // ===== Todo reminders =====
 
   /// Stable notification/alarm id for a task. The alarm plugin uses the same
@@ -246,7 +269,12 @@ class NotificationService {
     final start = todo.dueDate ?? todo.reminderTime!;
     final configuredStart = tz.TZDateTime.from(start, tz.local);
     final interval = Duration(hours: todo.reminderIntervalHours);
-    final firstAt = _nextRecurringOccurrence(configuredStart, now, interval);
+    final nextOccurrence =
+        _nextRecurringOccurrence(configuredStart, now, interval);
+    // Behavior B: if the next occurrence lands in quiet hours, push it to
+    // the quiet-hours end. The next native/Dart interval then starts from
+    // that delivered occurrence instead of silently losing the reminder.
+    final firstAt = _quietHours.moveOutside(nextOccurrence);
     final body = todo.description.isNotEmpty
         ? todo.description
         : 'Time to work on this task.';

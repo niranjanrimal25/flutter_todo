@@ -7,6 +7,7 @@ import 'package:nepali_utils/nepali_utils.dart';
 import 'package:todo_app/models/alarm.dart';
 import 'package:todo_app/models/habit.dart';
 import 'package:todo_app/models/habit_log.dart';
+import 'package:todo_app/models/quiet_hours.dart';
 import 'package:todo_app/models/alarm_tone.dart';
 import 'package:todo_app/models/subtask.dart';
 import 'package:todo_app/models/timer_state.dart';
@@ -254,6 +255,28 @@ void main() {
       );
 
       expect(log.date, DateTime(2026, 8, 25));
+    });
+  });
+
+  group('Quiet hours', () {
+    test('handles a quiet window that crosses midnight', () {
+      const settings = QuietHoursSettings(
+        enabled: true,
+        startMinutes: 22 * 60,
+        endMinutes: 7 * 60,
+      );
+
+      expect(settings.isActiveAt(DateTime(2026, 9, 1, 23)), isTrue);
+      expect(settings.isActiveAt(DateTime(2026, 9, 2, 6, 30)), isTrue);
+      expect(settings.isActiveAt(DateTime(2026, 9, 2, 12)), isFalse);
+      expect(
+        settings.moveOutside(DateTime(2026, 9, 1, 23, 30)),
+        DateTime(2026, 9, 2, 7),
+      );
+      expect(
+        settings.moveOutside(DateTime(2026, 9, 2, 6, 30)),
+        DateTime(2026, 9, 2, 7),
+      );
     });
   });
 

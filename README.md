@@ -20,6 +20,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🔎 Filter tasks: All / Today / Completed / Pending
 - 🧩 Kanban board with To Do / In Progress / Done columns and native long-press drag-and-drop
 - 🌱 Habits section with streaks, 14-day heatmaps, monthly history, and daily reminders
+- 🌙 Quiet Hours for repeating task reminders, including midnight-crossing windows
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
@@ -68,6 +69,11 @@ flutter test
   completing today cancels today's reminder while future reminders remain
   scheduled. The window is refreshed at startup and whenever a habit day is
   toggled. Reminders are local to each device and do not require cloud sync.
+- Quiet Hours is a global local setting for repeating task reminders only. It
+  defaults to 10:00 PM–7:00 AM when enabled, correctly handles windows that
+  cross midnight, and uses the selected push-at-end behavior: a blocked
+  two-hour occurrence is moved to the quiet-hours end before the next interval
+  is calculated. Explicit alarms and timers never pass through this filter.
 - The Home app-bar view button opens the List / Kanban selector. Kanban uses
   Flutter's native `LongPressDraggable` and `DragTarget` widgets,
   so it does not add a board package or a second ordering system. Columns group
