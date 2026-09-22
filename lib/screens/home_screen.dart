@@ -666,9 +666,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           // The Android companion receives the setting through
                           // NotificationService; this also rebuilds Dart/iOS
                           // scheduled occurrences with the same window.
-                          await context
-                              .read<TodoProvider>()
-                              .rescheduleAllTaskReminders();
+                          await Future.wait([
+                            context
+                                .read<TodoProvider>()
+                                .rescheduleAllTaskReminders(),
+                            context
+                                .read<HabitProvider>()
+                                .rescheduleAllHabitReminders(),
+                          ]);
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext);
                           }

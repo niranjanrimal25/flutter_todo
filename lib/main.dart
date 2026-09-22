@@ -142,6 +142,14 @@ void _configureNativeNotificationChannel() {
 /// legacy scheduled notifications). The Android recurring implementation
 /// sends the same task id through MainActivity's native channel.
 void _handleNotificationTap(String payload) {
+  if (payload.startsWith('habit:')) {
+    final habitId = int.tryParse(payload.substring('habit:'.length));
+    if (habitId != null && habitId > 0) {
+      NotificationNavigation.requestOpenHabit(habitId);
+      return;
+    }
+  }
+
   final normalized = payload.startsWith('todo:')
       ? payload.substring('todo:'.length)
       : payload;

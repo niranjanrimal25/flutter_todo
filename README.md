@@ -59,16 +59,17 @@ flutter test
   migrate in place. A task card shows checklist progress, while the add/edit
   screen provides add, edit, delete, and completion controls.
 - Habits are intentionally separate from tasks and alarms. SQLite schema
-  version 11 adds `habits` and `habit_logs`, with one unique log per habit/day.
-  The Habits tab provides quick today toggles, a 14-day heatmap, current and
-  longest streaks, all-time completion totals, and a full tappable
-  `table_calendar` month grid. Marking a day is optimistic for an instant UI
-  update and rolls back if the
-  local write fails.
-- Habit reminders use a rolling 30-day set of one-shot local notifications so
-  completing today cancels today's reminder while future reminders remain
-  scheduled. The window is refreshed at startup and whenever a habit day is
-  toggled. Reminders are local to each device and do not require cloud sync.
+  version 12 adds the richer reminder window fields while preserving older
+  habit reminder data. The Habits tab provides quick today toggles, a 14-day
+  heatmap, current and longest streaks, all-time completion totals, and a full
+  tappable `table_calendar` month grid. Marking a day is optimistic for an
+  instant UI update and rolls back if the local write fails.
+- Habit reminders can repeat every 1–24 hours between a start and end time.
+  They use repeating OS notification schedules, survive app close/reboot, and
+  continue after a habit is marked done (appropriate for repeatable habits such
+  as drinking water). Quiet Hours is applied to blocked times using the same
+  push-at-window-end behavior as task reminders. Reminders are local to each
+  device and do not require cloud sync.
 - Quiet Hours is a global local setting for repeating task reminders only. It
   defaults to 10:00 PM–7:00 AM when enabled, correctly handles windows that
   cross midnight, and uses the selected push-at-end behavior: a blocked
@@ -84,9 +85,10 @@ flutter test
 - `Todo.status` is intentionally separate from `isCompleted`: In Progress is
   useful for active work, while the legacy boolean remains available to the
   existing filters and reminder code. SQLite schema version 9 adds the
-  `status` column and version 10 adds stable sync identity/timestamps. During
-  the migration, existing rows with `isCompleted = 1` become Done and all
-  other rows become To Do; no saved tasks are discarded.
+  `status` column, version 10 adds stable sync identity/timestamps, and
+  version 12 adds the habit reminder window fields. During migration, existing
+  rows with `isCompleted = 1` become Done and all other rows become To Do; no
+  saved tasks are discarded.
 - Firebase sync is optional and keeps SQLite as the offline-first source for
   the UI. To enable private Android/iPhone sync, create a Firebase project,
   add the Android package `com.example.todo_app` and the iOS bundle id

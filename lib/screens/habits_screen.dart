@@ -351,14 +351,47 @@ class HabitCard extends StatelessWidget {
   }
 
   String _formatReminderTime(BuildContext context) {
-    return TimeOfDay(hour: habit.reminderHour!, minute: habit.reminderMinute!)
-        .format(context);
+    final start = TimeOfDay(
+      hour: habit.reminderStartHour,
+      minute: habit.reminderStartMinute,
+    ).format(context);
+    final end = TimeOfDay(
+      hour: habit.reminderEndHour,
+      minute: habit.reminderEndMinute,
+    ).format(context);
+    return 'Every ${habit.reminderIntervalHours}h, $start–$end';
   }
 
   static bool _isSameDay(DateTime first, DateTime second) =>
       first.year == second.year &&
       first.month == second.month &&
       first.day == second.day;
+}
+
+class _HabitTimePickerRow extends StatelessWidget {
+  final String label;
+  final TimeOfDay time;
+  final VoidCallback onTap;
+
+  const _HabitTimePickerRow({
+    required this.label,
+    required this.time,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.access_time_rounded),
+      title: Text(label),
+      trailing: Text(
+        time.format(context),
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      onTap: onTap,
+    );
+  }
 }
 
 class HabitFormScreen extends StatefulWidget {
@@ -375,8 +408,10 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
   late final TextEditingController _titleController;
   late String _selectedIcon;
   late Color _selectedColor;
-  late bool _hasReminder;
-  TimeOfDay? _reminderTime;
+  late bool _reminderEnabled;
+  late int _reminderIntervalHours;
+  late TimeOfDay _reminderStartTime;
+  late TimeOfDay _reminderEndTime;
   bool _saving = false;
 
   bool get _isEditing => widget.habit != null;
@@ -389,13 +424,16 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     _selectedColor = widget.habit?.colorValue == null
         ? AppColors.primary
         : Color(widget.habit!.colorValue!);
-    _hasReminder = widget.habit?.hasReminder ?? false;
-    if (_hasReminder) {
-      _reminderTime = TimeOfDay(
-        hour: widget.habit!.reminderHour!,
-        minute: widget.habit!.reminderMinute!,
-      );
-    }
+    _reminderEnabled = widget.habit?.reminderEnabled ?? false;
+    _reminderIntervalHours = widget.habit?.reminderIntervalHours ?? 2;
+    _reminderStartTime = TimeOfDay(
+      hour: widget.habit?.reminderStartHour ?? 8,
+      minute: widget.habit?.reminderStartMinute ?? 0,
+    );
+    _reminderEndTime = TimeOfDay(
+      hour: widget.habit?.reminderEndHour ?? 22,
+      minute: widget.habit?.reminderEndMinute ?? 0,
+    );
   }
 
   @override
@@ -507,53 +545,88 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
             ),
             const SizedBox(height: 28),
             Card(
-              child: SwitchListTile(
-                value: _hasReminder,
-                onChanged: (value) async {
-                  if (value && _reminderTime == null) {
-                    final picked = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.now(),
-                    );
-                    if (!mounted) return;
-                    if (picked == null) return;
-                    setState(() {
-                      _reminderTime = picked;
-                      _hasReminder = true;
-                    });
-                  } else {
-                    setState(() => _hasReminder = value);
-                  }
-                },
-                title: const Text('Daily reminder'),
-                subtitle: Text(
-                  _hasReminder && _reminderTime != null
-                      ? 'Every day at ${_reminderTime!.format(context)}'
-                      : 'Off',
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _reminderEnabled,
+                      onChanged: (value) =>
+                          setState(() => _reminderEnabled = value),
+                      title: const Text('Remind me'),
+                      subtitle: const Text(
+                        'Repeat a reminder during your active window',
+                      ),
+                      secondary:
+                          const Icon(Icons.notifications_active_outlined),
+                    ),
+                    if (_reminderEnabled) ...[
+                      const Divider(),
+                      DropdownButtonFormField<int>(
+                        initialValue: _reminderIntervalHours,
+                        decoration: const InputDecoration(
+                          labelText: 'Remind every',
+                          prefixIcon: Icon(Icons.repeat_rounded),
+                        ),
+                        items: List.generate(24, (index) {
+                          final hours = index + 1;
+                          return DropdownMenuItem<int>(
+                            value: hours,
+                            child: Text(
+                              '$hours ${hours == 1 ? 'hour' : 'hours'}',
+                            ),
+                          );
+                        }),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _reminderIntervalHours = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _HabitTimePickerRow(
+                        label: 'Start time',
+                        time: _reminderStartTime,
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: _reminderStartTime,
+                          );
+                          if (picked != null && mounted) {
+                            setState(() => _reminderStartTime = picked);
+                          }
+                        },
+                      ),
+                      _HabitTimePickerRow(
+                        label: 'End time',
+                        time: _reminderEndTime,
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: _reminderEndTime,
+                          );
+                          if (picked != null && mounted) {
+                            setState(() => _reminderEndTime = picked);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _reminderPreview(),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                secondary: const Icon(Icons.notifications_active_outlined),
               ),
             ),
-            if (_hasReminder) ...[
-              const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(Icons.access_time_rounded),
-                title: const Text('Reminder time'),
-                trailing: Text(
-                  (_reminderTime ?? TimeOfDay.now()).format(context),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                onTap: () async {
-                  final picked = await showTimePicker(
-                    context: context,
-                    initialTime: _reminderTime ?? TimeOfDay.now(),
-                  );
-                  if (picked != null && mounted) {
-                    setState(() => _reminderTime = picked);
-                  }
-                },
-              ),
-            ],
             const SizedBox(height: 34),
             FilledButton.icon(
               onPressed: _saving ? null : _save,
@@ -572,6 +645,24 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
     );
   }
 
+  String _reminderPreview() {
+    final preview = Habit(
+      title: _titleController.text,
+      reminderEnabled: true,
+      reminderIntervalHours: _reminderIntervalHours,
+      reminderStartHour: _reminderStartTime.hour,
+      reminderStartMinute: _reminderStartTime.minute,
+      reminderEndHour: _reminderEndTime.hour,
+      reminderEndMinute: _reminderEndTime.minute,
+    );
+    final count = preview.reminderCountPerDay;
+    return 'You\'ll be reminded every $_reminderIntervalHours '
+        '${_reminderIntervalHours == 1 ? 'hour' : 'hours'} between '
+        '${_reminderStartTime.format(context)} and '
+        '${_reminderEndTime.format(context)} ($count '
+        '${count == 1 ? 'time' : 'times'} a day).';
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
@@ -581,8 +672,12 @@ class _HabitFormScreenState extends State<HabitFormScreen> {
       createdAt: widget.habit?.createdAt,
       icon: _selectedIcon,
       colorValue: _selectedColor.toARGB32(),
-      reminderHour: _hasReminder ? _reminderTime?.hour : null,
-      reminderMinute: _hasReminder ? _reminderTime?.minute : null,
+      reminderEnabled: _reminderEnabled,
+      reminderIntervalHours: _reminderIntervalHours,
+      reminderStartHour: _reminderStartTime.hour,
+      reminderStartMinute: _reminderStartTime.minute,
+      reminderEndHour: _reminderEndTime.hour,
+      reminderEndMinute: _reminderEndTime.minute,
     );
 
     try {

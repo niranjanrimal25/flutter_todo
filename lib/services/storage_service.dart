@@ -8,7 +8,7 @@ import '../models/alarm.dart';
 class StorageService {
   static Database? _database;
 
-  static const int _dbVersion = 11;
+  static const int _dbVersion = 12;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -137,6 +137,38 @@ class StorageService {
         if (oldVersion < 11) {
           await _createHabitsTables(db);
         }
+        if (oldVersion < 12) {
+          await db.execute('''
+            ALTER TABLE habits ADD COLUMN reminderEnabled INTEGER NOT NULL DEFAULT 0
+          ''');
+          await db.execute('''
+            ALTER TABLE habits ADD COLUMN reminderIntervalHours INTEGER NOT NULL DEFAULT 2
+          ''');
+          await db.execute('''
+            ALTER TABLE habits ADD COLUMN reminderStartHour INTEGER
+          ''');
+          await db.execute('''
+            ALTER TABLE habits ADD COLUMN reminderStartMinute INTEGER
+          ''');
+          await db.execute('''
+            ALTER TABLE habits ADD COLUMN reminderEndHour INTEGER
+          ''');
+          await db.execute('''
+            ALTER TABLE habits ADD COLUMN reminderEndMinute INTEGER
+          ''');
+          // Preserve the old once-daily reminder as a single occurrence at
+          // its original time. Equal start/end means one time, not all day.
+          await db.execute('''
+            UPDATE habits
+            SET reminderEnabled = 1,
+                reminderIntervalHours = 24,
+                reminderStartHour = reminderHour,
+                reminderStartMinute = reminderMinute,
+                reminderEndHour = reminderHour,
+                reminderEndMinute = reminderMinute
+            WHERE reminderHour IS NOT NULL AND reminderMinute IS NOT NULL
+          ''');
+        }
       },
     );
   }
@@ -159,7 +191,13 @@ class StorageService {
         icon TEXT,
         colorValue INTEGER,
         reminderHour INTEGER,
-        reminderMinute INTEGER
+        reminderMinute INTEGER,
+        reminderEnabled INTEGER NOT NULL DEFAULT 0,
+        reminderIntervalHours INTEGER NOT NULL DEFAULT 2,
+        reminderStartHour INTEGER,
+        reminderStartMinute INTEGER,
+        reminderEndHour INTEGER,
+        reminderEndMinute INTEGER
       )
     ''');
     await db.execute('''

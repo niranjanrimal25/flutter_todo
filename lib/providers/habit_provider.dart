@@ -171,6 +171,8 @@ class HabitProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> rescheduleAllHabitReminders() => _scheduleAllReminders();
+
   Future<void> _scheduleAllReminders() async {
     for (final habit in _habits) {
       await _scheduleReminder(habit);
@@ -179,14 +181,7 @@ class HabitProvider extends ChangeNotifier {
 
   Future<void> _scheduleReminder(Habit habit) {
     if (habit.id == null) return Future<void>.value();
-    final completedDates = (_logsByHabit[habit.id!] ?? const <HabitLog>[])
-        .where((log) => log.completed)
-        .map((log) => _dateOnly(log.date))
-        .toSet();
-    return NotificationService.scheduleHabitReminders(
-      habit,
-      completedDates: completedDates,
-    );
+    return NotificationService.scheduleHabitReminders(habit);
   }
 
   static DateTime _dateOnly(DateTime date) =>

@@ -56,7 +56,10 @@ class _MainShellState extends State<MainShell> {
       // is restored. Android's native recurrence companion reschedules itself
       // from the same persisted setting.
       unawaited(
-        context.read<TodoProvider>().rescheduleAllTaskReminders().catchError((error) {
+        Future.wait([
+          context.read<TodoProvider>().rescheduleAllTaskReminders(),
+          context.read<HabitProvider>().rescheduleAllHabitReminders(),
+        ]).catchError((error) {
           debugPrint('Quiet-hours reminder refresh failed: $error');
         }),
       );
@@ -69,7 +72,7 @@ class _MainShellState extends State<MainShell> {
     // mutating the Navigator during that build can trip Flutter's child/render
     // object assertion.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) NotificationNavigation.tryOpenPendingTodo();
+      if (mounted) NotificationNavigation.tryOpenPendingNotification();
     });
   }
 

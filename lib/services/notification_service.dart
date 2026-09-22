@@ -378,14 +378,11 @@ class NotificationService {
 
   // ===== Habit reminders =====
 
-  /// Keeps a rolling 30-day window of one-shot daily habit reminders. A
-  /// rolling window lets the provider cancel today's reminder as soon as the
-  /// habit is completed, then put the next reminder window back in place.
-  /// Startup and every habit toggle refresh the window so it stays indefinite.
-  static Future<void> scheduleHabitReminders(
-    Habit habit, {
-    required Set<DateTime> completedDates,
-  }) async {
+  /// Schedules the habit's daily start+interval pattern as repeating OS
+  /// notifications. The app does not stop these when the habit is marked done:
+  /// the selected behavior is to keep prompting for repeatable habits such as
+  /// drinking water.
+  static Future<void> scheduleHabitReminders(Habit habit) async {
     if (habit.id == null || !habit.hasReminder) return;
 
     try {
@@ -397,29 +394,32 @@ class NotificationService {
     await cancelHabitReminders(habit.id!);
 
     final now = tz.TZDateTime.now(tz.local);
-    for (var slot = 0; slot < 30; slot++) {
-      final date = now.add(Duration(days: slot));
-      final day = DateTime(date.year, date.month, date.day);
-      // A completed habit skips today's notification. Future days have no
-      // completion yet, so they remain scheduled in the rolling window.
-      if (slot == 0 && completedDates.contains(day)) continue;
-
-      final scheduled = tz.TZDateTime(
-        tz.local,
-        date.year,
-        date.month,
-        date.day,
-        habit.reminderHour!,
-        habit.reminderMinute!,
+    final scheduledMinutes = <int>{};
+    var slot = 0;
+    for (final minute in habit.reminderTimesMinutes) {
+      var scheduled = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        minute ~/ 60,
+        minute % 60,
       );
-      if (!scheduled.isAfter(now)) continue;
+      if (!scheduled.isAfter(now)) {
+        scheduled = scheduled.add(const Duration(days: 1));
+      }
+
+      // Quiet hours use the same push-at-window-end behavior as task
+      // reminders. Deduplicate when multiple blocked times land at one end.
+      scheduled = _quietHours.moveOutside(scheduled);
+      final shiftedMinute = scheduled.hour * 60 + scheduled.minute;
+      if (!scheduledMinutes.add(shiftedMinute)) continue;
 
       try {
         await _notifications.zonedSchedule(
-          id: habitReminderNotificationId(habit.id!, slot),
-          title: '🌱 ${habit.title}',
-          body: 'Time to check in on your habit.',
-          scheduledDate: scheduled,
+          id: habitReminderNotificationId(habit.id!, slot++),
+          title: 'Time to: ${habit.title}',
+          body: 'Check in on this habit.',
+          scheduledDate: tz.TZDateTime.from(scheduled, tz.local),
           notificationDetails: const NotificationDetails(
             android: AndroidNotificationDetails(
               'habit_reminders',
@@ -439,6 +439,7 @@ class NotificationService {
             ),
           ),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          matchDateTimeComponents: DateTimeComponents.time,
           payload: 'habit:${habit.id}',
         );
       } catch (error) {
@@ -447,8 +448,10 @@ class NotificationService {
     }
   }
 
+  /// Kept in a separate namespace from task due-date (400000), task recurring
+  /// (600000), iOS backup (700000), alarm, and timer IDs.
   static int habitReminderNotificationId(int habitId, int slot) =>
-      400000 + habitId * 32 + slot;
+      800000 + habitId * 32 + slot;
 
   static Future<void> cancelHabitReminders(int habitId) async {
     try {
@@ -457,7 +460,9 @@ class NotificationService {
       debugPrint('Habit notifications are unavailable: $error');
       return;
     }
-    for (var slot = 0; slot < 30; slot++) {
+    // Up to 24 one-hour occurrences fit in a day; 32 leaves room for the
+    // inclusive endpoint and any future interval-window variation.
+    for (var slot = 0; slot < 32; slot++) {
       try {
         await cancelNotification(habitReminderNotificationId(habitId, slot));
       } catch (error) {
