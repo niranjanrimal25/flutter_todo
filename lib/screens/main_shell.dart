@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -61,6 +62,7 @@ class _MainShellState extends State<MainShell> {
           context.read<HabitProvider>().rescheduleAllHabitReminders(),
         ]).catchError((error) {
           debugPrint('Quiet-hours reminder refresh failed: $error');
+          return <void>[];
         }),
       );
     }

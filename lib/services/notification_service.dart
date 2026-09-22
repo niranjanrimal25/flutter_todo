@@ -313,7 +313,7 @@ class NotificationService {
             id: _iOSBackupId(todo.id!),
             title: todo.title,
             body: body,
-            scheduledDate: firstAt,
+            scheduledDate: tz.TZDateTime.from(firstAt, tz.local),
             payload: 'todo:${todo.id}',
           );
         }

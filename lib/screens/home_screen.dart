@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:nepali_utils/nepali_utils.dart';
 import '../models/todo.dart';
+import '../providers/habit_provider.dart';
 import '../providers/todo_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/quiet_hours_provider.dart';
@@ -649,6 +650,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           saving = true;
                           error = null;
                         });
+                        // Extract providers before any await.
+                        final todoProvider = context.read<TodoProvider>();
+                        final habitProvider = context.read<HabitProvider>();
                         try {
                           await provider.update(
                             QuietHoursSettings(
@@ -667,12 +671,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           // NotificationService; this also rebuilds Dart/iOS
                           // scheduled occurrences with the same window.
                           await Future.wait([
-                            context
-                                .read<TodoProvider>()
-                                .rescheduleAllTaskReminders(),
-                            context
-                                .read<HabitProvider>()
-                                .rescheduleAllHabitReminders(),
+                            todoProvider.rescheduleAllTaskReminders(),
+                            habitProvider.rescheduleAllHabitReminders(),
                           ]);
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext);
