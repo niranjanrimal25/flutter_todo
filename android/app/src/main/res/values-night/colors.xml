@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="splash_background">#6C63FF</color>
+    <color name="voice_widget_background">#29243B</color>
+    <color name="voice_widget_icon_background">#8B83FF</color>
+    <color name="voice_widget_label">#F3F0FF</color>
+    <color name="voice_widget_icon">#FFFFFF</color>
 </resources>

@@ -22,6 +22,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🌱 Habits section with streaks, 14-day heatmaps, monthly history, and daily reminders
 - 🌙 Quiet Hours for repeating task reminders, including midnight-crossing windows
 - 🎙️ Private in-app voice commands with live transcript, rule-based parsing, and review-before-save for tasks and habits
+- 🎙️ Android 2x1 “Voice Add” home-screen widget that opens directly into listening mode
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
@@ -85,6 +86,12 @@ flutter test
   A normal “Hey Google, open NS TODO” launch is indistinguishable from a
   regular launcher tap to Flutter, so the app cannot safely auto-start the mic
   for that phrase; use the Home microphone button for the explicit flow.
+- The Android `Voice Add` home-screen widget uses the native AppWidget system
+  through `home_widget`. It is a 2x1 widget with light/dark resources and a
+  `todo_app://voice` launch URI. Add it after installing by long-pressing the
+  Android launcher home screen, choosing **Widgets**, finding **NS TODO**, and
+  dragging **Voice Add** onto the home screen. Tapping it opens the voice
+  screen and starts listening after the microphone permission is granted.
 - The Home app-bar view button opens the List / Kanban selector. Kanban uses
   Flutter's native `LongPressDraggable` and `DragTarget` widgets,
   so it does not add a board package or a second ordering system. Columns group
