@@ -309,6 +309,13 @@ void main() {
       expect(draft.habitStartHour, 8);
       expect(draft.habitEndHour, 22);
     });
+
+    test('fuzzy matches a common task transcription error', () {
+      final draft = VoiceCommandParser.parse('add tox buy milk');
+
+      expect(draft.kind, VoiceCommandKind.task);
+      expect(draft.title, 'buy milk');
+    });
   });
 
   group('Subtask editor', () {

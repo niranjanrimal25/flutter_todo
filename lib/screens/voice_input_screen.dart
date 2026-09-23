@@ -28,6 +28,10 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
 
   bool _available = false;
   bool _isListening = false;
+  bool _usingOnDeviceFallback = false;
+  bool _fallbackAttempted = false;
+  String? _localeId;
+  final List<LocaleName> _locales = <LocaleName>[];
   String _transcript = '';
   String? _error;
 
@@ -59,6 +63,13 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
           _isListening = false;
           _error = error.errorMsg;
         });
+        // speech_to_text does not expose a vocabulary bias list. Prefer the
+        // online recognizer for accuracy, then retry on-device if the service
+        // reports a network/recognition failure.
+        if (!_usingOnDeviceFallback && !_fallbackAttempted) {
+          _fallbackAttempted = true;
+          unawaited(_retryOnDevice());
+        }
       },
     );
     if (!mounted) return;
@@ -66,18 +77,96 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
       _available = available;
       _error = available ? null : 'Speech recognition is not available.';
     });
-    if (available && widget.autoStart) await _startListening();
+    if (available) {
+      await _loadRecognitionLocales();
+      if (widget.autoStart) await _startListening();
+    }
   }
 
-  Future<void> _startListening() async {
+  Future<void> _loadRecognitionLocales() async {
+    try {
+      final available = await _speech.locales();
+      final system = await _speech.systemLocale();
+      LocaleName? selected;
+      for (final locale in available) {
+        if (locale.localeId == system?.localeId) {
+          selected = locale;
+          break;
+        }
+      }
+      selected ??= available.cast<LocaleName?>().firstWhere(
+            (locale) => locale?.localeId == 'en-IN',
+            orElse: () => null,
+          );
+      selected ??= available.cast<LocaleName?>().firstWhere(
+            (locale) => locale?.localeId == 'en-US',
+            orElse: () => null,
+          );
+      selected ??= system;
+      if (!mounted) return;
+      setState(() {
+        _locales
+          ..clear()
+          ..addAll(available);
+        _localeId = selected?.localeId;
+      });
+    } catch (_) {
+      // The platform's system locale remains the recognizer fallback.
+    }
+  }
+
+  Future<void> _startListening({bool onDevice = false}) async {
     if (!_available) return;
     setState(() {
       _error = null;
       _isListening = true;
       _transcript = '';
+      _usingOnDeviceFallback = onDevice;
+      if (!onDevice) _fallbackAttempted = false;
     });
-    await _speech.listen(onResult: _onSpeechResult);
+    await _speech.listen(
+      onResult: _onSpeechResult,
+      localeId: _localeId,
+      onDevice: onDevice,
+      listenMode: ListenMode.dictation,
+    );
     if (mounted) setState(() => _isListening = _speech.isListening);
+  }
+
+  Future<void> _retryOnDevice() async {
+    await _speech.cancel();
+    if (!mounted) return;
+    await _startListening(onDevice: true);
+  }
+
+  Future<void> _chooseLocale() async {
+    if (_locales.isEmpty) return;
+    final selected = await showModalBottomSheet<LocaleName>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: _locales
+              .map(
+                (locale) => ListTile(
+                  title: Text(locale.name),
+                  subtitle: Text(locale.localeId),
+                  trailing: locale.localeId == _localeId
+                      ? const Icon(Icons.check_rounded,
+                          color: AppColors.primary)
+                      : null,
+                  onTap: () => Navigator.pop(context, locale),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      await _stopListening();
+      setState(() => _localeId = selected.localeId);
+      if (widget.autoStart) await _startListening();
+    }
   }
 
   Future<void> _stopListening() async {
@@ -148,7 +237,16 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
                   fontSize: 13,
                 ),
               ),
-              const SizedBox(height: 34),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _chooseLocale,
+                icon: const Icon(Icons.language_rounded, size: 16),
+                label: Text(
+                  '${_localeId ?? 'system locale'} • '
+                  '${_usingOnDeviceFallback ? 'on-device fallback' : 'online first'}',
+                ),
+              ),
+              const SizedBox(height: 18),
               _buildWaveform(isDark),
               const SizedBox(height: 32),
               Expanded(

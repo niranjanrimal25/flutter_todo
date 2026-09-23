@@ -86,6 +86,13 @@ flutter test
   A normal “Hey Google, open NS TODO” launch is indistinguishable from a
   regular launcher tap to Flutter, so the app cannot safely auto-start the mic
   for that phrase; use the Home microphone button for the explicit flow.
+- Voice recognition prefers online platform recognition (`onDevice: false`)
+  for better command vocabulary accuracy and retries on-device if recognition
+  fails. The speech plugin does not expose Android `EXTRA_BIASING_STRINGS`, so
+  the app uses local fuzzy command matching (including common “tox” → “task”
+  errors) as the privacy-safe safety net instead of a cloud NLP service. The
+  voice screen shows the active locale and lets the user choose another
+  installed locale.
 - The Android `Voice Add` home-screen widget uses the native AppWidget system
   through `home_widget`. It is a 2x1 widget with light/dark resources and a
   `todo_app://voice` launch URI. Add it after installing by long-pressing the

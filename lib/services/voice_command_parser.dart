@@ -1,3 +1,4 @@
+import '../models/todo.dart';
 import '../utils/constants.dart';
 
 enum VoiceCommandKind { task, habit, reminder }
@@ -76,7 +77,6 @@ class VoiceCommandParser {
     final reference = now ?? DateTime.now();
     final original = transcript.trim();
     var working = original;
-    final lower = working.toLowerCase();
 
     var kind = VoiceCommandKind.task;
     final commandPatterns = <VoiceCommandKind, List<String>>{
@@ -103,9 +103,18 @@ class VoiceCommandParser {
     var commandMatched = false;
     for (final entry in commandPatterns.entries) {
       for (final command in entry.value) {
-        if (lower.startsWith(command)) {
+        final commandWords = command.split(' ');
+        final spokenWords = _leadingWords(working, commandWords.length);
+        if (spokenWords.length == commandWords.length &&
+            List.generate(
+              commandWords.length,
+              (index) => _closeEnough(
+                spokenWords[index],
+                commandWords[index],
+              ),
+            ).every((matches) => matches)) {
           kind = entry.key;
-          working = working.substring(command.length).trim();
+          working = _stripLeadingWords(working, commandWords.length);
           commandMatched = true;
           break;
         }
@@ -140,26 +149,36 @@ class VoiceCommandParser {
     }
 
     var priority = Priority.medium;
-    final priorityMatch = RegExp(
+    final priorityPhraseMatch = RegExp(
       r'\b(urgent|high\s+priority|high|low\s+priority|low|medium\s+priority|medium)\b',
       caseSensitive: false,
     ).firstMatch(working);
+    final fuzzyPriorityMatch = priorityPhraseMatch == null
+        ? _findFuzzyWord(working, const ['urgent', 'high', 'low', 'medium'])
+        : null;
+    final priorityMatch = priorityPhraseMatch ?? fuzzyPriorityMatch;
     if (priorityMatch != null) {
-      final value = priorityMatch.group(1)!.toLowerCase();
-      if (value.contains('urgent') || value.startsWith('high')) {
+      final value = priorityMatch.group(0)!.toLowerCase();
+      if (value.contains('urgent') || value.startsWith('high') || _closeEnough(value, 'high')) {
         priority = Priority.high;
-      } else if (value.startsWith('low')) {
+      } else if (value.startsWith('low') || _closeEnough(value, 'low')) {
         priority = Priority.low;
       }
       working = _removeMatch(working, priorityMatch);
+      // Clean the common “high priority” suffix after a fuzzy high/low word.
+      working = working.replaceFirst(
+        RegExp(r'\bpriority\b', caseSensitive: false),
+        '',
+      );
     }
 
     String category = 'General';
     for (final candidate in knownCategories) {
-      final match = RegExp(
+      final exact = RegExp(
         '\\b${RegExp.escape(candidate)}\\b',
         caseSensitive: false,
       ).firstMatch(working);
+      final match = exact ?? _findFuzzyWord(working, [candidate]);
       if (match != null) {
         category = candidate;
         working = _removeMatch(working, match);
@@ -331,6 +350,78 @@ class VoiceCommandParser {
     final result = _extractTime('at $input');
     if (result.hour == null) return null;
     return _ParsedTime(result.hour!, result.minute!);
+  }
+
+  static List<String> _leadingWords(String input, int count) {
+    final words = <String>[];
+    final matches = RegExp(r'[^\s]+').allMatches(input);
+    for (final match in matches.take(count)) {
+      words.add(
+        match.group(0)!
+            .toLowerCase()
+            .replaceAll(RegExp(r'^[,;:.!?]+|[,;:.!?]+$'), ''),
+      );
+    }
+    return words;
+  }
+
+  static String _stripLeadingWords(String input, int count) {
+    final matches = RegExp(r'[^\s]+').allMatches(input).toList();
+    if (matches.length < count) return input.trim();
+    return input.substring(matches[count - 1].end).trim();
+  }
+
+  static bool _closeEnough(String actual, String expected) {
+    final normalized = actual.toLowerCase();
+    const aliases = <String, String>{
+      'tox': 'task',
+      'talks': 'task',
+      'tax': 'task',
+      'taks': 'task',
+      'abit': 'habit',
+      'habits': 'habit',
+      'remindr': 'reminder',
+      'reminda': 'reminder',
+      'tooo': 'to',
+    };
+    if ((aliases[normalized] ?? normalized) == expected) return true;
+    if (normalized.isEmpty || expected.isEmpty) return false;
+    final distance = _levenshtein(normalized, expected);
+    final similarity =
+        1 - distance / (normalized.length > expected.length
+            ? normalized.length
+            : expected.length);
+    // Short command words need a slightly looser threshold because speech
+    // recognition often turns “to” into “too” or “task” into “tox”.
+    return similarity >= (expected.length <= 3 ? 0.55 : 0.52);
+  }
+
+  static Match? _findFuzzyWord(String input, Iterable<String> expectedWords) {
+    for (final match in RegExp(r'[A-Za-z]+').allMatches(input)) {
+      if (expectedWords.any((word) => _closeEnough(match.group(0)!, word))) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  static int _levenshtein(String first, String second) {
+    final previous = List<int>.generate(second.length + 1, (i) => i);
+    for (var i = 0; i < first.length; i++) {
+      var diagonal = previous[0];
+      previous[0] = i + 1;
+      for (var j = 0; j < second.length; j++) {
+        final above = previous[j + 1];
+        final cost = first[i] == second[j] ? 0 : 1;
+        previous[j + 1] = [
+          previous[j + 1] + 1,
+          previous[j] + 1,
+          diagonal + cost,
+        ].reduce((a, b) => a < b ? a : b);
+        diagonal = above;
+      }
+    }
+    return previous[second.length];
   }
 
   static String _removeMatch(String input, Match match) =>
