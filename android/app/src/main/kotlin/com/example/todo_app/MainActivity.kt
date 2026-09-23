@@ -8,6 +8,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var reminderChannel: MethodChannel? = null
     private var pendingTodoId: Int? = null
+    private var pendingVoiceLaunch = false
     private var dartReady = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -21,7 +22,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "ready" -> {
                         dartReady = true
-                        dispatchPendingTodo()
+                        dispatchPendingIntents()
                         result.success(null)
                     }
                     "scheduleRecurringReminder" -> {
@@ -92,12 +93,19 @@ class MainActivity : FlutterActivity() {
         val todoId = intent?.getIntExtra(EXTRA_OPEN_TODO_ID, -1) ?: -1
         if (todoId > 0) {
             pendingTodoId = todoId
-            dispatchPendingTodo()
         }
+        if (intent?.data?.scheme == "todo_app" && intent.data?.host == "voice") {
+            pendingVoiceLaunch = true
+        }
+        dispatchPendingIntents()
     }
 
-    private fun dispatchPendingTodo() {
+    private fun dispatchPendingIntents() {
         if (!dartReady) return
+        if (pendingVoiceLaunch) {
+            reminderChannel?.invokeMethod("openVoice")
+            pendingVoiceLaunch = false
+        }
         val todoId = pendingTodoId ?: return
         reminderChannel?.invokeMethod("openTodo", todoId)
         pendingTodoId = null

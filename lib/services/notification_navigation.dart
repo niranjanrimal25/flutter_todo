@@ -6,6 +6,7 @@ import '../providers/habit_provider.dart';
 import '../providers/todo_provider.dart';
 import '../screens/add_edit_todo_screen.dart';
 import '../screens/habits_screen.dart';
+import '../screens/voice_input_screen.dart';
 
 /// Coordinates notification deep links with asynchronously loaded local data.
 class NotificationNavigation {
@@ -13,6 +14,7 @@ class NotificationNavigation {
       GlobalKey<NavigatorState>();
   static int? _pendingTodoId;
   static int? _pendingHabitId;
+  static bool _pendingVoice = false;
 
   static void requestOpenTodo(int todoId) {
     _pendingTodoId = todoId;
@@ -28,12 +30,29 @@ class NotificationNavigation {
     });
   }
 
+  static void requestOpenVoice() {
+    _pendingVoice = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      tryOpenPendingNotification();
+    });
+  }
+
   /// MainShell calls this after all SQLite providers have loaded. Both task
   /// and habit notification taps are deferred until a Navigator exists.
   static void tryOpenPendingNotification() {
     final navigator = navigatorKey.currentState;
     final context = navigator?.context;
     if (navigator == null || context == null) return;
+
+    if (_pendingVoice) {
+      _pendingVoice = false;
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const VoiceInputScreen(autoStart: true),
+        ),
+      );
+      return;
+    }
 
     final todoId = _pendingTodoId;
     if (todoId != null) {

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
 import '../providers/todo_provider.dart';
 import '../providers/alarm_provider.dart';
@@ -13,7 +12,6 @@ import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'alarm_timer_screen.dart';
 import 'habits_screen.dart';
-import 'voice_input_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -25,46 +23,11 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   bool _loaded = false;
-  bool _pendingVoiceWidgetLaunch = false;
-  bool _voiceRouteOpen = false;
-  StreamSubscription<Uri?>? _widgetClickSubscription;
 
   @override
   void initState() {
     super.initState();
-    _widgetClickSubscription = HomeWidget.widgetClicked.listen(_handleWidgetUri);
-    unawaited(_checkInitialWidgetLaunch());
     _loadData();
-  }
-
-  Future<void> _checkInitialWidgetLaunch() async {
-    try {
-      final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
-      _handleWidgetUri(uri);
-    } catch (error) {
-      debugPrint('Home widget launch check failed: $error');
-    }
-  }
-
-  void _handleWidgetUri(Uri? uri) {
-    if (uri?.host != 'voice') return;
-    if (!_loaded) {
-      _pendingVoiceWidgetLaunch = true;
-      return;
-    }
-    _openVoiceInput();
-  }
-
-  void _openVoiceInput() {
-    if (!mounted || _voiceRouteOpen) return;
-    _voiceRouteOpen = true;
-    Navigator.of(context)
-        .push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => const VoiceInputScreen(autoStart: true),
-          ),
-        )
-        .whenComplete(() => _voiceRouteOpen = false);
   }
 
   Future<void> _loadData() async {
@@ -104,10 +67,6 @@ class _MainShellState extends State<MainShell> {
       );
     }
     setState(() => _loaded = true);
-    if (_pendingVoiceWidgetLaunch) {
-      _pendingVoiceWidgetLaunch = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openVoiceInput());
-    }
 
     // A notification tap can arrive before the SQLite-backed provider is
     // ready. Try again after loading so cold-start taps open the exact task.
@@ -209,11 +168,6 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  @override
-  void dispose() {
-    _widgetClickSubscription?.cancel();
-    super.dispose();
-  }
 }
 
 /// Flutter-stage loading screen shown after the native splash and while

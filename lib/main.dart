@@ -119,6 +119,10 @@ void _openRingScreen(AlarmSettings alarm) {
 
 void _configureNativeNotificationChannel() {
   _nativeNotificationChannel.setMethodCallHandler((call) async {
+    if (call.method == 'openVoice') {
+      NotificationNavigation.requestOpenVoice();
+      return;
+    }
     if (call.method != 'openTodo') return;
 
     final todoId = call.arguments is num
