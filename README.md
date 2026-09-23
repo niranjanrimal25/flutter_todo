@@ -83,9 +83,12 @@ flutter test
   today/tomorrow/weekday/month dates, times, priorities, categories, simple
   descriptions, intervals, and comma/and-separated subtasks. Android and iOS
   microphone/speech permissions are declared in their platform manifests.
-  A normal “Hey Google, open NS TODO” launch is indistinguishable from a
-  regular launcher tap to Flutter, so the app cannot safely auto-start the mic
-  for that phrase; use the Home microphone button for the explicit flow.
+  The Voice Add screen also contains an editable command field, so Android
+  Gboard or iPhone Dictation can be used by tapping the keyboard microphone;
+  the same Review command parser handles that text. A normal “Hey Google, open
+  NS TODO” launch is indistinguishable from a regular launcher tap to Flutter,
+  so the app cannot safely auto-start the mic for that phrase; use the Home
+  microphone button or Voice Add widget for the explicit flow.
 - Voice recognition prefers online platform recognition (`onDevice: false`)
   for better command vocabulary accuracy and retries on-device if recognition
   fails. The speech plugin does not expose Android `EXTRA_BIASING_STRINGS`, so

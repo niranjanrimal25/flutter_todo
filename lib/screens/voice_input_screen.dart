@@ -21,6 +21,7 @@ class VoiceInputScreen extends StatefulWidget {
 class _VoiceInputScreenState extends State<VoiceInputScreen>
     with SingleTickerProviderStateMixin {
   final SpeechToText _speech = SpeechToText();
+  final TextEditingController _commandController = TextEditingController();
   late final AnimationController _waveController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
@@ -121,6 +122,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
       _error = null;
       _isListening = true;
       _transcript = '';
+      _commandController.clear();
       _usingOnDeviceFallback = onDevice;
       if (!onDevice) _fallbackAttempted = false;
     });
@@ -176,12 +178,20 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
 
   void _onSpeechResult(SpeechRecognitionResult result) {
     if (!mounted) return;
-    setState(() => _transcript = result.recognizedWords);
+    setState(() {
+      _transcript = result.recognizedWords;
+      _commandController.value = TextEditingValue(
+        text: result.recognizedWords,
+        selection: TextSelection.collapsed(
+          offset: result.recognizedWords.length,
+        ),
+      );
+    });
   }
 
   Future<void> _reviewTranscript() async {
     await _stopListening();
-    final transcript = _transcript.trim();
+    final transcript = _commandController.text.trim();
     if (transcript.isEmpty) {
       setState(() => _error = 'I did not hear a command. Try again.');
       return;
@@ -262,22 +272,31 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
                           : AppColors.primary.withValues(alpha: 0.16),
                     ),
                   ),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      _transcript.isEmpty
-                          ? 'Your live transcript will appear here…'
-                          : _transcript,
-                      style: TextStyle(
-                        color: _transcript.isEmpty
-                            ? (isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textGrey)
-                            : (isDark
-                                ? AppColors.darkTextPrimary
-                                : AppColors.textDark),
-                        fontSize: 19,
-                        height: 1.45,
-                      ),
+                  child: TextField(
+                    controller: _commandController,
+                    minLines: 4,
+                    maxLines: null,
+                    autofocus: false,
+                    textCapitalization: TextCapitalization.sentences,
+                    onTap: () {
+                      if (_isListening) unawaited(_stopListening());
+                    },
+                    onChanged: (value) {
+                      if (_transcript != value) {
+                        setState(() => _transcript = value);
+                      }
+                    },
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText:
+                          'Speak with the app mic, or type here and tap the keyboard mic…',
+                    ),
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkTextPrimary
+                          : AppColors.textDark,
+                      fontSize: 18,
+                      height: 1.45,
                     ),
                   ),
                 ),
@@ -367,6 +386,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen>
   @override
   void dispose() {
     unawaited(_speech.cancel());
+    _commandController.dispose();
     _waveController.dispose();
     super.dispose();
   }
