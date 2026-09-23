@@ -103,7 +103,7 @@ class MainActivity : FlutterActivity() {
     private fun dispatchPendingIntents() {
         if (!dartReady) return
         if (pendingVoiceLaunch) {
-            reminderChannel?.invokeMethod("openVoice")
+            reminderChannel?.invokeMethod("openVoice", null)
             pendingVoiceLaunch = false
         }
         val todoId = pendingTodoId ?: return

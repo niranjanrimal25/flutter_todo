@@ -61,24 +61,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return 'Good Evening 🌙';
   }
 
-  String _viewModeLabel(_HomeViewMode mode) {
-    switch (mode) {
-      case _HomeViewMode.list:
-        return 'List';
-      case _HomeViewMode.kanban:
-        return 'Kanban';
-    }
-  }
-
-  IconData _viewModeIcon(_HomeViewMode mode) {
-    switch (mode) {
-      case _HomeViewMode.list:
-        return Icons.view_list_rounded;
-      case _HomeViewMode.kanban:
-        return Icons.view_kanban_rounded;
-    }
-  }
-
   IconData _syncIcon(CloudSyncState state) {
     switch (state) {
       case CloudSyncState.unavailable:
