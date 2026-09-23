@@ -32,6 +32,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Allow NS TODO to capture an image for a task attachment.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Allow NS TODO to listen to voice commands for creating tasks and habits.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Allow NS TODO to convert your voice command into a task or habit.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow NS TODO to choose an image for a task attachment.</string>
 	<key>UIApplicationSceneManifest</key>

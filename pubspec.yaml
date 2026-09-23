@@ -30,6 +30,7 @@ dependencies:
   firebase_core: ^4.13.0
   firebase_auth: ^6.5.7
   cloud_firestore: ^6.9.0
+  speech_to_text: ^7.5.0
 
 dev_dependencies:
   flutter_test:

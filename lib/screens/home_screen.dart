@@ -19,6 +19,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/nepali_calendar_widget.dart';
 import '../widgets/todo_kanban_view.dart';
 import 'add_edit_todo_screen.dart';
+import 'voice_input_screen.dart';
 
 enum _HomeViewMode { list, kanban }
 
@@ -185,6 +186,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           Row(
             children: [
+              IconButton(
+                tooltip: 'Voice command',
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const VoiceInputScreen(autoStart: true),
+                  ),
+                ),
+                icon: const Icon(Icons.mic_none_rounded),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                  foregroundColor: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
               Consumer<QuietHoursProvider>(
                 builder: (context, quietProvider, _) {
                   final active = quietProvider.isActiveNow;

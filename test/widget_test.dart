@@ -15,6 +15,7 @@ import 'package:todo_app/models/todo.dart';
 import 'package:todo_app/providers/todo_provider.dart';
 import 'package:todo_app/services/alarm_scheduler.dart';
 import 'package:todo_app/services/notification_service.dart';
+import 'package:todo_app/services/voice_command_parser.dart';
 import 'package:todo_app/screens/add_edit_todo_screen.dart';
 import 'package:todo_app/utils/constants.dart';
 import 'package:todo_app/widgets/empty_state.dart';
@@ -277,6 +278,36 @@ void main() {
         settings.moveOutside(DateTime(2026, 9, 2, 6, 30)),
         DateTime(2026, 9, 2, 7),
       );
+    });
+  });
+
+  group('Voice command parser', () {
+    test('parses a task with date, priority, category and subtasks', () {
+      final draft = VoiceCommandParser.parse(
+        'add task buy milk tomorrow at 5 PM, high priority, shopping '
+        'with subtasks buy eggs and buy bread',
+        now: DateTime(2026, 9, 1, 9),
+      );
+
+      expect(draft.kind, VoiceCommandKind.task);
+      expect(draft.title, 'buy milk');
+      expect(draft.priority, Priority.high);
+      expect(draft.category, 'Shopping');
+      expect(draft.dueDate, DateTime(2026, 9, 2));
+      expect(draft.dueHour, 17);
+      expect(draft.subtasks, ['buy eggs', 'buy bread']);
+    });
+
+    test('parses a habit interval and active window', () {
+      final draft = VoiceCommandParser.parse(
+        'add habit drink water every 2 hours from 8 AM to 10 PM',
+      );
+
+      expect(draft.kind, VoiceCommandKind.habit);
+      expect(draft.reminderEnabled, isTrue);
+      expect(draft.reminderIntervalHours, 2);
+      expect(draft.habitStartHour, 8);
+      expect(draft.habitEndHour, 22);
     });
   });
 

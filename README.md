@@ -21,6 +21,7 @@ A beautiful todo app with reminders, alarms and a timer, built with Flutter.
 - 🧩 Kanban board with To Do / In Progress / Done columns and native long-press drag-and-drop
 - 🌱 Habits section with streaks, 14-day heatmaps, monthly history, and daily reminders
 - 🌙 Quiet Hours for repeating task reminders, including midnight-crossing windows
+- 🎙️ Private in-app voice commands with live transcript, rule-based parsing, and review-before-save for tasks and habits
 - 🌙 Light & dark themes (dark mode covers cards, chips, dialogs, pickers, and system surfaces)
 - 🔔 Alarms & timer ring a custom alarm tone even when the app is closed
 - 💾 Local persistence with SQLite (`sqflite`)
@@ -43,8 +44,8 @@ flutter test
 
 - `lib/models/` — `todo.dart`, `subtask.dart`, `habit.dart`, `habit_log.dart`, and `alarm.dart` with SQLite (de)serialization
 - `lib/providers/` — `TodoProvider`, `HabitProvider`, `AlarmProvider`, `ThemeProvider`
-- `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `habits_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
-- `lib/services/` — `storage_service.dart` (sqflite), `firebase_sync_service.dart`, `image_storage_service.dart`, `notification_service.dart`
+- `lib/screens/` — `main_shell.dart` (bottom nav), `home_screen.dart`, `habits_screen.dart`, `voice_input_screen.dart`, `voice_review_screen.dart`, `add_edit_todo_screen.dart`, `alarm_timer_screen.dart`
+- `lib/services/` — `storage_service.dart` (sqflite), `firebase_sync_service.dart`, `voice_command_parser.dart`, `image_storage_service.dart`, `notification_service.dart`
 - `lib/widgets/` — todo cards, Kanban view, Nepali calendar widget, Nepali date picker dialog, empty state
 - `lib/utils/` — theme and shared constants
 
@@ -75,6 +76,15 @@ flutter test
   cross midnight, and uses the selected push-at-end behavior: a blocked
   two-hour occurrence is moved to the quiet-hours end before the next interval
   is calculated. Explicit alarms and timers never pass through this filter.
+- Voice commands use the on-device `speech_to_text` package. The mic screen
+  shows a live transcript and a waveform, then opens a review form before any
+  task or habit is saved. The parser recognizes task/habit/reminder prefixes,
+  today/tomorrow/weekday/month dates, times, priorities, categories, simple
+  descriptions, intervals, and comma/and-separated subtasks. Android and iOS
+  microphone/speech permissions are declared in their platform manifests.
+  A normal “Hey Google, open NS TODO” launch is indistinguishable from a
+  regular launcher tap to Flutter, so the app cannot safely auto-start the mic
+  for that phrase; use the Home microphone button for the explicit flow.
 - The Home app-bar view button opens the List / Kanban selector. Kanban uses
   Flutter's native `LongPressDraggable` and `DragTarget` widgets,
   so it does not add a board package or a second ordering system. Columns group
