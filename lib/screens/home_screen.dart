@@ -201,143 +201,104 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(width: 8),
-              Consumer<QuietHoursProvider>(
-                builder: (context, quietProvider, _) {
-                  final active = quietProvider.isActiveNow;
-                  return IconButton(
-                    tooltip: active
-                        ? 'Quiet hours active'
-                        : 'Quiet hours settings',
-                    onPressed: _showQuietHoursDialog,
-                    icon: Icon(
-                      active
-                          ? Icons.nightlight_round
-                          : Icons.nightlight_outlined,
-                      color: active ? AppColors.warning : AppColors.primary,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: (active
-                              ? AppColors.warning
-                              : AppColors.primary)
-                          .withValues(alpha: 0.1),
-                    ),
-                  );
+              PopupMenuButton<String>(
+                tooltip: 'More options',
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.more_horiz_rounded),
+                onSelected: (action) {
+                  switch (action) {
+                    case 'quiet':
+                      _showQuietHoursDialog();
+                      break;
+                    case 'sync':
+                      _showSyncDialog();
+                      break;
+                    case 'theme':
+                      context.read<ThemeProvider>().toggleTheme();
+                      break;
+                    case 'list':
+                      setState(() => _viewMode = _HomeViewMode.list);
+                      break;
+                    case 'kanban':
+                      setState(() => _viewMode = _HomeViewMode.kanban);
+                      break;
+                    case 'search':
+                      setState(() {
+                        _isSearching = !_isSearching;
+                        if (!_isSearching) {
+                          _searchController.clear();
+                          context.read<TodoProvider>().search('');
+                        }
+                      });
+                      break;
+                  }
                 },
-              ),
-              const SizedBox(width: 8),
-              Consumer<TodoProvider>(
-                builder: (context, provider, _) {
-                  final state = provider.syncState;
-                  final color = state == CloudSyncState.synced
-                      ? AppColors.success
-                      : state == CloudSyncState.error
-                          ? AppColors.danger
-                          : AppColors.primary;
-                  return IconButton(
-                    tooltip: provider.syncStateLabel,
-                    onPressed: _showSyncDialog,
-                    icon: Icon(_syncIcon(state), color: color),
-                    style: IconButton.styleFrom(
-                      backgroundColor: color.withValues(alpha: 0.1),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'quiet',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.nightlight_outlined),
+                      title: Text('Quiet Hours'),
                     ),
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              Consumer<ThemeProvider>(
-                builder: (context, themeProvider, _) {
-                  return AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (child, animation) {
-                      return RotationTransition(
-                        turns: animation,
-                        child: ScaleTransition(scale: animation, child: child),
-                      );
-                    },
-                    child: IconButton(
-                      key: ValueKey(themeProvider.isDarkMode),
-                      onPressed: () => themeProvider.toggleTheme(),
-                      icon: Icon(
-                        themeProvider.isDarkMode
+                  ),
+                  const PopupMenuItem(
+                    value: 'sync',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.cloud_sync_rounded),
+                      title: Text('Sync tasks'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'theme',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        Theme.of(context).brightness == Brightness.dark
                             ? Icons.light_mode_rounded
                             : Icons.dark_mode_rounded,
-                        color: AppColors.primary,
                       ),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                      title: Text(
+                        Theme.of(context).brightness == Brightness.dark
+                            ? 'Light theme'
+                            : 'Dark theme',
                       ),
                     ),
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: PopupMenuButton<_HomeViewMode>(
-                  tooltip: 'Change view (${_viewModeLabel(_viewMode)})',
-                  onSelected: (mode) => setState(() => _viewMode = mode),
-                  padding: EdgeInsets.zero,
-                  icon: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: Icon(
-                      _viewModeIcon(_viewMode),
-                      key: ValueKey(_viewMode),
-                      color: AppColors.primary,
+                  ),
+                  PopupMenuItem(
+                    value: 'list',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.view_list_rounded),
+                      title: Text(
+                        'List view${_viewMode == _HomeViewMode.list ? ' ✓' : ''}',
+                      ),
                     ),
                   ),
-                  itemBuilder: (context) => _HomeViewMode.values
-                    .map(
-                      (mode) => PopupMenuItem<_HomeViewMode>(
-                        value: mode,
-                        child: Row(
-                          children: [
-                            Icon(
-                              _viewModeIcon(mode),
-                              size: 20,
-                              color: mode == _viewMode
-                                  ? AppColors.primary
-                                  : AppColors.textGrey,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(_viewModeLabel(mode))),
-                            if (mode == _viewMode)
-                              const Icon(
-                                Icons.check_rounded,
-                                size: 18,
-                                color: AppColors.primary,
-                              ),
-                          ],
-                        ),
+                  PopupMenuItem(
+                    value: 'kanban',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.view_kanban_rounded),
+                      title: Text(
+                        'Kanban${_viewMode == _HomeViewMode.kanban ? ' ✓' : ''}',
                       ),
-                    )
-                    .toList(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _isSearching = !_isSearching;
-                    if (!_isSearching) {
-                      _searchController.clear();
-                      context.read<TodoProvider>().search('');
-                    }
-                  });
-                },
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Icon(
-                    _isSearching ? Icons.close_rounded : Icons.search_rounded,
-                    key: ValueKey(_isSearching),
-                    color: AppColors.primary,
+                    ),
                   ),
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                ),
+                  PopupMenuItem(
+                    value: 'search',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        _isSearching
+                            ? Icons.close_rounded
+                            : Icons.search_rounded,
+                      ),
+                      title: Text(_isSearching ? 'Close search' : 'Search'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
